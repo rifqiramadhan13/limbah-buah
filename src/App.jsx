@@ -1,4 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import ContactSection from './ContactSection.jsx'
+import EducationTopics from './EducationTopics.jsx'
+import PartnerMapSection from './PartnerMapSection.jsx'
+import RegistrationPage from './RegistrationPage.jsx'
 import './App.css'
 
 const iconPaths = {
@@ -129,7 +133,9 @@ const navItems = [
   ['Tentang', '#tentang'],
   ['Cara Kerja', '#cara-kerja'],
   ['Fitur', '#fitur'],
+  ['Peta Mitra', '#peta-mitra'],
   ['Edukasi', '#edukasi'],
+  ['Kontak', '#kontak'],
 ]
 
 const issues = [
@@ -182,8 +188,37 @@ const imageUrl =
 
 function App() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [pathname, setPathname] = useState(window.location.pathname)
 
   const closeMenu = () => setMenuOpen(false)
+  const openRegistration = (event) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    window.history.pushState({}, '', '/daftar-limbah')
+    setPathname('/daftar-limbah')
+    window.scrollTo(0, 0)
+  }
+  const returnHome = (event) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    window.history.pushState({}, '', '/')
+    setPathname('/')
+    window.scrollTo(0, 0)
+  }
+
+  useEffect(() => {
+    const syncPathname = () => {
+      setPathname(window.location.pathname)
+      window.scrollTo(0, 0)
+    }
+
+    window.addEventListener('popstate', syncPathname)
+    return () => window.removeEventListener('popstate', syncPathname)
+  }, [])
+
+  if (pathname === '/daftar-limbah') {
+    return <RegistrationPage onHomeClick={returnHome} />
+  }
 
   return (
     <>
@@ -423,6 +458,8 @@ function App() {
           </div>
         </section>
 
+        <PartnerMapSection />
+
         <section className="education-section section-pad" id="edukasi">
           <div className="page-shell education-layout">
             <div className="education-intro">
@@ -431,30 +468,7 @@ function App() {
               <p className="body-copy">Setiap jenis kulit buah memiliki karakteristik bahan organik yang berbeda. Memahaminya dapat menjadi salah satu pertimbangan dalam menentukan cara pemanfaatan.</p>
               <a className="button button-outline" href="#topik-edukasi">Jelajahi informasi <Icon name="arrow" size={17} /></a>
             </div>
-            <div className="education-cards" id="topik-edukasi">
-              <article className="education-card">
-                <span className="edu-number">01</span>
-                <span className="edu-icon"><Icon name="flask" size={21} /></span>
-                <h3>Karakteristik kimia</h3>
-                <p>Mengenal bahan organik, serat, dan senyawa alami pada kulit buah.</p>
-                <span className="edu-link">BACA TOPIK <Icon name="arrow" size={15} /></span>
-              </article>
-              <article className="education-card">
-                <span className="edu-number">02</span>
-                <span className="edu-icon"><Icon name="cycle" size={21} /></span>
-                <h3>Proses pengolahan</h3>
-                <p>Pengantar pengomposan dan transformasi bahan organik.</p>
-                <span className="edu-link">BACA TOPIK <Icon name="arrow" size={15} /></span>
-              </article>
-              <article className="education-card">
-                <span className="edu-number">03</span>
-                <span className="edu-icon"><Icon name="sprout" size={21} /></span>
-                <h3>Kimia berkelanjutan</h3>
-                <p>Prinsip pemanfaatan sumber daya dalam pendekatan berkelanjutan.</p>
-                <span className="edu-link">BACA TOPIK <Icon name="arrow" size={15} /></span>
-              </article>
-              <p className="education-disclaimer">Materi edukasi perlu dilengkapi sumber ilmiah sebelum dipublikasikan.</p>
-            </div>
+            <EducationTopics Icon={Icon} />
           </div>
         </section>
 
@@ -495,6 +509,21 @@ function App() {
             <span className="cta-sprig sprig-two"><Icon name="leaf" size={26} /></span>
           </div>
         </section>
+
+        <section className="registration-promo section-pad">
+          <div className="page-shell registration-promo-content">
+            <div>
+              <p className="eyebrow"><span className="eyebrow-line" /> UNTUK PENGHASIL LIMBAH</p>
+              <h2>Punya Limbah Kulit Buah? <em>Daftarkan Sekarang!</em></h2>
+              <p>Salurkan limbah kulit buah Anda melalui SIRKULIT. Daftarkan informasi limbah yang dihasilkan agar pengelola dapat meninjau dan menghubungkan Anda dengan mitra pengolah yang sesuai.</p>
+            </div>
+            <a className="button button-dark" href="/daftar-limbah" onClick={openRegistration}>
+              Daftarkan Limbah <Icon name="arrow" size={18} />
+            </a>
+          </div>
+        </section>
+
+        <ContactSection />
       </main>
 
       <footer className="site-footer">
@@ -506,7 +535,7 @@ function App() {
             </a>
             <p>Sistem informasi yang mempertemukan penghasil dan mitra pengolah limbah kulit buah.</p>
           </div>
-          <div className="footer-column"><h3>Jelajahi</h3><a href="#tentang">Tentang SIRKULIT</a><a href="#cara-kerja">Cara kerja</a><a href="#fitur">Fitur</a></div>
+          <div className="footer-column"><h3>Jelajahi</h3><a href="#tentang">Tentang SIRKULIT</a><a href="#cara-kerja">Cara kerja</a><a href="#fitur">Fitur</a><a href="#kontak">Kontak</a></div>
           <div className="footer-column"><h3>Untuk Anda</h3><a href="#bergabung">Penghasil limbah</a><a href="#bergabung">Mitra pengolah</a><a href="#edukasi">Pusat informasi</a></div>
           <a className="back-top" href="#beranda">KEMBALI KE ATAS <span>↑</span></a>
         </div>

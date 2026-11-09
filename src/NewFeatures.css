@@ -1,0 +1,385 @@
+.new-page {
+  min-height: 100vh;
+  background: #fbfaf6;
+}
+
+.new-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid rgb(37 79 58 / 9%);
+  background: rgb(246 245 239 / 96%);
+  backdrop-filter: blur(16px);
+}
+
+.new-page-header-inner {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.new-page-header .brand-mark {
+  color: var(--forest);
+}
+
+.registration-promo {
+  background: #f1f0e9;
+}
+
+.registration-promo-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 48px;
+}
+
+.registration-promo-content h2 {
+  max-width: 720px;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: clamp(32px, 3.4vw, 42px);
+  font-weight: 500;
+  letter-spacing: -1.5px;
+  line-height: 1.2;
+}
+
+.registration-promo-content h2 em {
+  color: var(--forest);
+  font-weight: 450;
+}
+
+.registration-promo-content > div > p:not(.eyebrow) {
+  max-width: 690px;
+  margin: 17px 0 0;
+  color: #70756d;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.registration-page-section {
+  background: #f3f0e8;
+}
+
+.registration-form-shell {
+  max-width: 860px;
+  padding: 38px;
+  border: 1px solid #e1e0d8;
+  background: #fbfaf6;
+}
+
+.registration-form-shell > h1,
+.contact-copy h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: clamp(32px, 4vw, 42px);
+  font-weight: 500;
+  letter-spacing: -1.5px;
+  line-height: 1.2;
+}
+
+.registration-intro {
+  max-width: 650px;
+  margin: 14px 0 30px;
+  color: #70756d;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.new-form {
+  display: grid;
+  gap: 26px;
+}
+
+.new-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.new-form legend {
+  width: 100%;
+  margin-bottom: 17px;
+  padding-bottom: 10px;
+  color: var(--forest);
+  border-bottom: 1px solid #e2e2d9;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 550;
+}
+
+.new-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px 20px;
+}
+
+.new-form-field {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  color: #343d33;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.new-form-field > span {
+  font-weight: 600;
+}
+
+.new-form-field:has(textarea) {
+  grid-column: 1 / -1;
+}
+
+.required-mark {
+  color: #9a6344;
+}
+
+.new-form-field input,
+.new-form-field select,
+.new-form-field textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 13px;
+  color: var(--ink);
+  border: 1px solid #d6d8cf;
+  border-radius: 3px;
+  background: #fff;
+  font: inherit;
+}
+
+.new-form-field textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.new-form-field input:focus,
+.new-form-field select:focus,
+.new-form-field textarea:focus {
+  outline: 2px solid rgb(37 79 58 / 30%);
+  outline-offset: 2px;
+  border-color: var(--forest);
+}
+
+.consent-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #555d53;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.consent-field input {
+  width: 19px;
+  height: 19px;
+  flex: none;
+  margin: 2px 0 0;
+  accent-color: var(--forest);
+}
+
+.form-submit {
+  justify-self: start;
+}
+
+.form-submit:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+}
+
+.form-feedback {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 24px;
+  padding: 15px 17px;
+  border: 1px solid;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.form-feedback-success {
+  color: #254f3a;
+  border-color: #b7c8b4;
+  background: #edf2e9;
+}
+
+.form-feedback-error {
+  color: #813d2f;
+  border-color: #d7b6ac;
+  background: #f8eeeb;
+}
+
+.contact-section {
+  background: #eeeee7;
+}
+
+.contact-layout {
+  display: grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  align-items: start;
+  gap: 72px;
+}
+
+.contact-copy h2 {
+  max-width: 480px;
+}
+
+.contact-copy h2 em {
+  color: var(--forest);
+  font-weight: 450;
+}
+
+.contact-copy > p:not(.eyebrow) {
+  max-width: 480px;
+  margin: 18px 0 0;
+  color: #70756d;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.contact-details {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #d9dbd1;
+  color: #687064;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.contact-details h3,
+.contact-form-card h3 {
+  margin: 0 0 4px;
+  color: #343d33;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 550;
+}
+
+.contact-details a {
+  color: var(--forest);
+  text-underline-offset: 3px;
+}
+
+.contact-form-card {
+  padding: 28px;
+  border: 1px solid #dedfd5;
+  background: #f8f7f2;
+}
+
+.contact-form-card h3 {
+  margin-bottom: 20px;
+}
+
+.contact-form {
+  gap: 17px;
+}
+
+.contact-form .new-form-grid {
+  gap: 14px;
+}
+
+.form-hint {
+  margin: -9px 0 0;
+  color: #73776e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1000px) {
+  .registration-promo-content {
+    gap: 30px;
+  }
+
+  .contact-layout {
+    gap: 40px;
+  }
+
+  .registration-form-shell {
+    padding: 30px;
+  }
+}
+
+@media (max-width: 700px) {
+  .new-page-header-inner {
+    min-height: 68px;
+  }
+
+  .new-page-header .text-link {
+    font-size: 13px;
+  }
+
+  .registration-page-section {
+    padding-block: 42px;
+  }
+
+  .registration-promo-content {
+    grid-template-columns: 1fr;
+    gap: 23px;
+  }
+
+  .registration-promo-content h2 {
+    font-size: clamp(28px, 8vw, 34px);
+    letter-spacing: -1px;
+  }
+
+  .registration-promo-content > div > p:not(.eyebrow) {
+    font-size: 15px;
+  }
+
+  .registration-form-shell {
+    width: calc(100% - 32px);
+    padding: 22px 18px;
+  }
+
+  .registration-form-shell > h1,
+  .contact-copy h2 {
+    font-size: clamp(28px, 8vw, 34px);
+    letter-spacing: -1px;
+  }
+
+  .registration-intro,
+  .contact-copy > p:not(.eyebrow) {
+    font-size: 15px;
+  }
+
+  .new-form-grid,
+  .contact-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .new-form-grid {
+    gap: 15px;
+  }
+
+  .new-form legend {
+    font-size: 20px;
+  }
+
+  .new-form-field:has(textarea) {
+    grid-column: auto;
+  }
+
+  .new-form-field {
+    font-size: 15px;
+  }
+
+  .consent-field {
+    font-size: 14px;
+  }
+
+  .contact-layout {
+    gap: 34px;
+  }
+
+  .contact-form-card {
+    padding: 21px 17px;
+  }
+}
