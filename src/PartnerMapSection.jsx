@@ -4,6 +4,8 @@ import 'leaflet/dist/leaflet.css'
 import { FRUIT_TYPES } from '../shared/form-options.js'
 import { getJson } from './api.js'
 
+const MALANG_CENTER = [-7.9666, 112.6326]
+
 function googleMapsLink(partner) {
   if (partner.googleMapsUrl) return partner.googleMapsUrl
   const query = `${partner.latitude},${partner.longitude}`
@@ -60,7 +62,7 @@ function PartnerMap({ partners }) {
     const map = L.map(containerRef.current, {
       scrollWheelZoom: false,
       zoomControl: true,
-    }).setView([-2.5, 118], 4)
+    }).setView(MALANG_CENTER, 10)
     const markers = L.layerGroup().addTo(map)
     const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
