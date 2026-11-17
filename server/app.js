@@ -2,10 +2,12 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer } from 'node:http'
 import {
   validateContactMessage,
+  validateEcosystemRegistration,
   validatePartner,
   validateWasteRegistration,
 } from './validation.js'
-import { FRUIT_TYPES } from '../shared/form-options.js'
+import { geocodeAddress, getCachedGeocode } from './geocoding.js'
+import { ECOSYSTEM_ROLES, FRUIT_TYPES, ORGANIC_PRODUCTS } from '../shared/form-options.js'
 
 const MAX_BODY_BYTES = 16 * 1024
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
@@ -30,6 +32,26 @@ const PARTNER_FIELDS = `
   verification_status AS verificationStatus,
   is_location_public AS isLocationPublic,
   created_at AS createdAt, updated_at AS updatedAt
+`
+const ECOSYSTEM_FIELDS = `
+  id, registration_code AS registrationCode, role,
+  full_name AS fullName, business_name AS businessName,
+  whatsapp, email, province, city, district, village, address,
+  producer_type AS producerType, waste_types AS wasteTypesJson,
+  product_types AS productTypesJson, product_type AS productType,
+  processing_type AS processingType,
+  quantity_kg AS quantityKg, capacity_kg AS capacityKg,
+  frequency, waste_condition AS wasteCondition, notes,
+  consent_at AS consentAt, directory_consent_at AS directoryConsentAt,
+  latitude, longitude, location_status AS locationStatus,
+  map_consent_at AS mapConsentAt, status, created_at AS createdAt
+`
+const SEED_LOCATION_FIELDS = `
+  id, seed_key AS seedKey, name, address, whatsapp, province, city, district,
+  google_maps_url AS googleMapsUrl, processing_type AS processingType,
+  latitude, longitude, location_status AS locationStatus,
+  verification_status AS verificationStatus,
+  is_location_public AS isLocationPublic, notes, created_at AS createdAt
 `
 
 function sendJson(response, status, payload) {
@@ -101,6 +123,25 @@ function formatPartner(row) {
   }
 }
 
+function formatEcosystemRegistration(row) {
+  return {
+    ...row,
+    wasteTypes: JSON.parse(row.wasteTypesJson),
+    productTypes: JSON.parse(row.productTypesJson),
+  }
+}
+
+function completeRegistrationAddress(registration) {
+  return [
+    registration.address,
+    registration.village,
+    registration.district,
+    registration.city,
+    registration.province,
+    'Indonesia',
+  ].filter(Boolean).join(', ')
+}
+
 function createRateLimiter() {
   const requests = new Map()
 
@@ -131,8 +172,46 @@ export function createApiServer({ database, adminApiKey = process.env.ADMIN_API_
       return
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/ecosystem/geocode') {
+      const clientAddress = request.socket.remoteAddress || 'unknown'
+      if (!allowRequest(`${clientAddress}:${url.pathname}`)) {
+        sendJson(response, 429, { error: 'Terlalu banyak permintaan geocoding. Silakan coba kembali nanti.' })
+        return
+      }
+
+      const body = await readJson(request)
+      if (body.error) {
+        sendJson(response, body.error.status, { error: body.error.message })
+        return
+      }
+      const address = typeof body.value?.address === 'string' ? body.value.address.trim() : ''
+      if (!address || address.length > 1000) {
+        sendJson(response, 400, { error: 'Alamat wajib diisi dan maksimal 1.000 karakter.' })
+        return
+      }
+      if (!process.env.GOOGLE_GEOCODING_API_KEY) {
+        sendJson(response, 503, { error: 'Geocoding Google belum dikonfigurasi. Pilih titik lokasi secara manual pada peta.' })
+        return
+      }
+
+      const result = await geocodeAddress(database, address)
+      if (result.status !== 'google_verified') {
+        sendJson(response, 422, {
+          error: result.status === 'not_found'
+            ? 'Alamat belum ditemukan. Periksa alamat atau pilih titik secara manual pada peta.'
+            : 'Alamat belum dapat diverifikasi secara presisi. Pilih titik lokasi secara manual pada peta.',
+          status: result.status,
+          formattedAddress: result.formattedAddress || null,
+        })
+        return
+      }
+      sendJson(response, 200, result)
+      return
+    }
+
     if (request.method === 'POST' && (
       url.pathname === '/api/waste-registrations' ||
+      url.pathname === '/api/ecosystem/registrations' ||
       url.pathname === '/api/contact-messages'
     )) {
       const clientAddress = request.socket.remoteAddress || 'unknown'
@@ -189,6 +268,74 @@ export function createApiServer({ database, adminApiKey = process.env.ADMIN_API_
         return
       }
 
+      if (url.pathname === '/api/ecosystem/registrations') {
+        const result = validateEcosystemRegistration(body.value)
+        if (result.errors) {
+          sendJson(response, 400, { error: 'Periksa kembali data pendaftaran.', details: result.errors })
+          return
+        }
+
+        const registration = result.value
+        const registrationCode = createReferenceCode('SKR')
+        const latitude = registration.mapConsent ? registration.latitude : null
+        const longitude = registration.mapConsent ? registration.longitude : null
+        const cachedGeocode = registration.mapConsent
+          ? getCachedGeocode(database, completeRegistrationAddress(registration))
+          : null
+        const geocodeMatches = cachedGeocode?.status === 'google_verified'
+          && Math.abs(cachedGeocode.latitude - latitude) < 0.000001
+          && Math.abs(cachedGeocode.longitude - longitude) < 0.000001
+        const locationStatus = latitude === null
+          ? 'unverified'
+          : geocodeMatches ? 'google_verified' : 'user_confirmed'
+        database.prepare(`
+          INSERT INTO ecosystem_registrations (
+            registration_code, role, full_name, business_name, whatsapp, email,
+            province, city, district, village, address, producer_type, waste_types,
+            product_types, product_type, processing_type, quantity_kg, capacity_kg, frequency,
+            waste_condition, notes, consent_at, directory_consent_at,
+            latitude, longitude, location_status, map_consent_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+            CASE WHEN ? = 1 THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END,
+            ?, ?, ?, CASE WHEN ? = 1 THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END)
+        `).run(
+          registrationCode,
+          registration.role,
+          registration.fullName,
+          registration.businessName || null,
+          registration.whatsapp,
+          registration.email || null,
+          registration.province,
+          registration.city,
+          registration.district,
+          registration.village,
+          registration.address,
+          registration.producerType || null,
+          JSON.stringify(registration.wasteTypes),
+          JSON.stringify(registration.productTypes),
+          registration.productType || null,
+          registration.processingType || null,
+          registration.quantityKg,
+          registration.capacityKg,
+          registration.frequency,
+          registration.wasteCondition || null,
+          registration.notes || null,
+          registration.directoryConsent ? 1 : 0,
+          latitude,
+          longitude,
+          locationStatus,
+          registration.mapConsent ? 1 : 0,
+        )
+
+        sendJson(response, 201, {
+          registrationCode,
+          status: 'pending_review',
+          statusLabel: 'Menunggu Peninjauan',
+        })
+        return
+      }
+
       const result = validateContactMessage(body.value)
       if (result.errors) {
         sendJson(response, 400, { error: 'Periksa kembali pesan Anda.', details: result.errors })
@@ -210,6 +357,255 @@ export function createApiServer({ database, adminApiKey = process.env.ADMIN_API_
       )
 
       sendJson(response, 201, { messageCode, message: 'Pesan berhasil dikirim.' })
+      return
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/ecosystem/directory') {
+      const query = (url.searchParams.get('q') || '').trim().toLowerCase()
+      const role = (url.searchParams.get('role') || '').trim()
+      const region = (url.searchParams.get('region') || '').trim().toLowerCase()
+      if (query.length > 100 || region.length > 120) {
+        sendJson(response, 400, { error: 'Panjang pencarian atau wilayah melebihi batas.' })
+        return
+      }
+      if (role && !Object.hasOwn(ECOSYSTEM_ROLES, role)) {
+        sendJson(response, 400, { error: 'Kategori pengguna tidak valid.' })
+        return
+      }
+
+      const rows = database.prepare(`
+        SELECT id, role, full_name AS fullName, business_name AS businessName,
+          whatsapp, province, city, waste_types AS wasteTypesJson,
+          product_types AS productTypesJson, product_type AS productType,
+          quantity_kg AS quantityKg, capacity_kg AS capacityKg,
+          frequency, latitude, longitude,
+          location_status AS locationStatus, map_consent_at AS mapConsentAt
+        FROM ecosystem_registrations
+        WHERE status = 'verified'
+          AND directory_consent_at IS NOT NULL
+          AND (? = '' OR role = ?)
+          AND (? = '' OR instr(lower(city || ' ' || province), ?) > 0)
+        ORDER BY created_at DESC, id DESC
+      `).all(role, role, region, region).map((row) => {
+        const wasteTypes = JSON.parse(row.wasteTypesJson)
+        const productTypes = JSON.parse(row.productTypesJson)
+        const item = {
+          id: row.id,
+          role: row.role,
+          name: row.businessName || row.fullName,
+          whatsapp: row.whatsapp,
+          province: row.province,
+          city: row.city,
+          wasteTypes,
+          productTypes,
+          productType: row.productType,
+          quantityKg: row.quantityKg,
+          capacityKg: row.capacityKg,
+          frequency: row.frequency,
+          mapLocationId: row.mapConsentAt
+            && row.latitude !== null && row.longitude !== null
+            && ['google_verified', 'user_confirmed'].includes(row.locationStatus)
+            ? `registration:${row.id}`
+            : null,
+        }
+        const searchable = [
+          item.name,
+          item.province,
+          item.city,
+          item.productType,
+          ...item.wasteTypes,
+          ...item.productTypes,
+        ].filter(Boolean).join(' ').toLowerCase()
+        return { item, matches: !query || searchable.includes(query) }
+      }).filter(({ matches }) => matches).map(({ item }) => item)
+
+      const regions = database.prepare(`
+        SELECT DISTINCT city, province
+        FROM ecosystem_registrations
+        WHERE status = 'verified' AND directory_consent_at IS NOT NULL
+        ORDER BY province COLLATE NOCASE, city COLLATE NOCASE
+      `).all().map(({ city, province }) => `${city}, ${province}`)
+
+      sendJson(response, 200, { items: rows, regions })
+      return
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/ecosystem/map') {
+      const filters = {
+        q: (url.searchParams.get('q') || '').trim().toLowerCase(),
+        role: (url.searchParams.get('role') || '').trim(),
+        wasteType: (url.searchParams.get('wasteType') || '').trim(),
+        processingType: (url.searchParams.get('processingType') || '').trim().toLowerCase(),
+        productType: (url.searchParams.get('productType') || '').trim(),
+        district: (url.searchParams.get('district') || '').trim().toLowerCase(),
+        city: (url.searchParams.get('city') || '').trim().toLowerCase(),
+      }
+      if (
+        filters.q.length > 120
+        || filters.processingType.length > 120
+        || filters.productType.length > 100
+        || filters.district.length > 100
+        || filters.city.length > 100
+      ) {
+        sendJson(response, 400, { error: 'Panjang pencarian melebihi batas.' })
+        return
+      }
+      if (filters.role && !Object.hasOwn(ECOSYSTEM_ROLES, filters.role)) {
+        sendJson(response, 400, { error: 'Kategori pengguna tidak valid.' })
+        return
+      }
+      if (filters.wasteType && !FRUIT_TYPES.includes(filters.wasteType)) {
+        sendJson(response, 400, { error: 'Jenis limbah tidak valid.' })
+        return
+      }
+      if (filters.productType && !ORGANIC_PRODUCTS.includes(filters.productType)) {
+        sendJson(response, 400, { error: 'Jenis produk tidak valid.' })
+        return
+      }
+
+      const partners = database.prepare(`
+        SELECT id, name, address, region, latitude, longitude,
+          google_maps_url AS googleMapsUrl,
+          accepted_fruit_types AS wasteTypesJson,
+          capacity_kg AS capacityKg
+        FROM partners
+        WHERE verification_status = 'verified'
+          AND is_location_public = 1
+          AND latitude IS NOT NULL AND longitude IS NOT NULL
+      `).all().map((row) => ({
+        id: `partner:${row.id}`,
+        source: 'partner',
+        role: 'processor',
+        name: row.name,
+        whatsapp: '',
+        address: row.address,
+        province: '',
+        city: row.region,
+        district: '',
+        latitude: row.latitude,
+        longitude: row.longitude,
+        googleMapsUrl: row.googleMapsUrl,
+        wasteTypes: JSON.parse(row.wasteTypesJson),
+        productTypes: [],
+        productType: '',
+        quantityKg: null,
+        capacityKg: row.capacityKg,
+        processingType: 'Mitra pengolah organik',
+        frequency: '',
+        notes: '',
+      }))
+      const seeds = database.prepare(`
+        SELECT id, name, address, whatsapp, province, city, district,
+          google_maps_url AS googleMapsUrl, processing_type AS processingType,
+          latitude, longitude, notes
+        FROM ecosystem_seed_locations
+        WHERE verification_status = 'verified'
+          AND is_location_public = 1
+          AND latitude IS NOT NULL AND longitude IS NOT NULL
+      `).all().map((row) => ({
+        ...row,
+        id: `seed:${row.id}`,
+        source: 'seed',
+        role: 'processor',
+        wasteTypes: [],
+        productTypes: [],
+        productType: '',
+        quantityKg: null,
+        capacityKg: null,
+        frequency: '',
+      }))
+      const registrations = database.prepare(`
+        SELECT id, role, full_name AS fullName, business_name AS businessName,
+          whatsapp, address, province, city, district,
+          waste_types AS wasteTypesJson, product_types AS productTypesJson,
+          product_type AS productType, processing_type AS processingType,
+          quantity_kg AS quantityKg, capacity_kg AS capacityKg,
+          frequency, notes, latitude, longitude
+        FROM ecosystem_registrations
+        WHERE status = 'verified'
+          AND map_consent_at IS NOT NULL
+          AND location_status IN ('google_verified', 'user_confirmed')
+          AND latitude IS NOT NULL AND longitude IS NOT NULL
+      `).all().map((row) => ({
+        ...row,
+        id: `registration:${row.id}`,
+        source: 'registration',
+        name: row.businessName || row.fullName,
+        googleMapsUrl: '',
+        wasteTypes: JSON.parse(row.wasteTypesJson),
+        productTypes: JSON.parse(row.productTypesJson),
+      }))
+      const allItems = [...partners, ...seeds, ...registrations]
+      const items = allItems.filter((item) => {
+        if (filters.role && item.role !== filters.role) return false
+        if (filters.wasteType && !item.wasteTypes.includes(filters.wasteType)) return false
+        if (filters.productType && item.productType !== filters.productType
+          && !item.productTypes.includes(filters.productType)) return false
+        if (filters.processingType
+          && !item.processingType.toLowerCase().includes(filters.processingType)) return false
+        if (filters.district && !item.district.toLowerCase().includes(filters.district)) return false
+        if (filters.city && !item.city.toLowerCase().includes(filters.city)) return false
+        if (!filters.q) return true
+        const searchable = [
+          item.name,
+          item.address,
+          item.city,
+          item.district,
+          item.processingType,
+          item.productType,
+          ...item.wasteTypes,
+          ...item.productTypes,
+        ].filter(Boolean).join(' ').toLowerCase()
+        return searchable.includes(filters.q)
+      })
+
+      const legacySupplierCount = database.prepare(
+        'SELECT COUNT(*) AS count FROM waste_registrations',
+      ).get().count
+      const roleCounts = database.prepare(`
+        SELECT role, COUNT(*) AS count
+        FROM ecosystem_registrations
+        GROUP BY role
+      `).all().reduce((counts, row) => ({ ...counts, [row.role]: row.count }), {})
+      const partnerCount = database.prepare('SELECT COUNT(*) AS count FROM partners').get().count
+      const seedCount = database.prepare('SELECT COUNT(*) AS count FROM ecosystem_seed_locations').get().count
+      const totalRegistered = legacySupplierCount
+        + Object.values(roleCounts).reduce((sum, count) => sum + count, 0)
+        + partnerCount
+        + seedCount
+      const seedFilters = database.prepare(`
+        SELECT district, city, processing_type AS processingType
+        FROM ecosystem_seed_locations
+      `).all()
+
+      sendJson(response, 200, {
+        items,
+        stats: {
+          suppliers: legacySupplierCount + (roleCounts.supplier || 0),
+          processors: partnerCount + seedCount + (roleCounts.processor || 0),
+          buyers: roleCounts.buyer || 0,
+          totalRegistered,
+          verifiedLocations: allItems.length,
+        },
+        filters: {
+          districts: [...new Set([
+            ...allItems.map((item) => item.district),
+            ...seedFilters.map((item) => item.district),
+          ].filter(Boolean))].sort(),
+          cities: [...new Set([
+            ...allItems.map((item) => item.city),
+            ...seedFilters.map((item) => item.city),
+          ].filter(Boolean))].sort(),
+          processingTypes: [...new Set([
+            ...allItems.map((item) => item.processingType),
+            ...seedFilters.map((item) => item.processingType),
+          ].filter(Boolean))].sort(),
+          productTypes: [...new Set(allItems.flatMap((item) => [
+            ...item.productTypes,
+            item.productType,
+          ]).filter(Boolean))].sort(),
+        },
+      })
       return
     }
 
@@ -345,11 +741,136 @@ export function createApiServer({ database, adminApiKey = process.env.ADMIN_API_
       return
     }
 
+    if (url.pathname === '/api/admin/ecosystem-seeds') {
+      if (!requireAdmin(request, response, adminApiKey)) return
+      if (request.method !== 'GET') {
+        sendJson(response, 405, { error: 'Metode tidak diizinkan.' })
+        return
+      }
+      const items = database.prepare(`
+        SELECT ${SEED_LOCATION_FIELDS}
+        FROM ecosystem_seed_locations
+        ORDER BY city COLLATE NOCASE, name COLLATE NOCASE
+      `).all().map((row) => ({
+        ...row,
+        isLocationPublic: Boolean(row.isLocationPublic),
+      }))
+      sendJson(response, 200, { items })
+      return
+    }
+
+    if (url.pathname.startsWith('/api/admin/ecosystem-seeds/')) {
+      if (!requireAdmin(request, response, adminApiKey)) return
+      if (request.method !== 'PATCH') {
+        sendJson(response, 405, { error: 'Metode tidak diizinkan.' })
+        return
+      }
+      const id = Number(url.pathname.slice('/api/admin/ecosystem-seeds/'.length))
+      if (!Number.isSafeInteger(id) || id < 1) {
+        sendJson(response, 400, { error: 'ID lokasi awal tidak valid.' })
+        return
+      }
+      const body = await readJson(request)
+      if (body.error) {
+        sendJson(response, body.error.status, { error: body.error.message })
+        return
+      }
+      const latitude = body.value?.latitude === null || body.value?.latitude === ''
+        ? null
+        : Number(body.value?.latitude)
+      const longitude = body.value?.longitude === null || body.value?.longitude === ''
+        ? null
+        : Number(body.value?.longitude)
+      const verificationStatus = body.value?.verificationStatus
+      const isLocationPublic = body.value?.isLocationPublic
+      const validCoordinates = (latitude === null && longitude === null) || (
+        Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
+        && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180
+      )
+      if (!validCoordinates) {
+        sendJson(response, 400, { error: 'Latitude dan longitude harus berupa koordinat yang valid dan diisi bersama.' })
+        return
+      }
+      if (!['pending', 'verified', 'rejected'].includes(verificationStatus)) {
+        sendJson(response, 400, { error: 'Status verifikasi lokasi tidak valid.' })
+        return
+      }
+      if (typeof isLocationPublic !== 'boolean') {
+        sendJson(response, 400, { error: 'Status publikasi lokasi harus berupa pilihan ya atau tidak.' })
+        return
+      }
+      if (verificationStatus === 'verified' && (latitude === null || longitude === null)) {
+        sendJson(response, 400, { error: 'Lokasi harus memiliki koordinat yang diverifikasi sebelum dipublikasikan.' })
+        return
+      }
+      if (isLocationPublic && verificationStatus !== 'verified') {
+        sendJson(response, 400, { error: 'Verifikasi lokasi sebelum mengizinkan publikasi.' })
+        return
+      }
+
+      const update = database.prepare(`
+        UPDATE ecosystem_seed_locations SET
+          latitude = ?, longitude = ?,
+          location_status = CASE
+            WHEN ? IS NULL THEN 'unverified'
+            WHEN location_status = 'google_verified' THEN 'google_verified'
+            ELSE 'admin_verified'
+          END,
+          verification_status = ?, is_location_public = ?
+        WHERE id = ?
+      `).run(latitude, longitude, latitude, verificationStatus, isLocationPublic ? 1 : 0, id)
+      if (update.changes === 0) {
+        sendJson(response, 404, { error: 'Lokasi awal tidak ditemukan.' })
+        return
+      }
+      const item = database.prepare(`
+        SELECT ${SEED_LOCATION_FIELDS}
+        FROM ecosystem_seed_locations
+        WHERE id = ?
+      `).get(id)
+      sendJson(response, 200, {
+        location: { ...item, isLocationPublic: Boolean(item.isLocationPublic) },
+      })
+      return
+    }
+
+    if (url.pathname.startsWith('/api/admin/ecosystem-registrations/')) {
+      if (!requireAdmin(request, response, adminApiKey)) return
+      if (request.method !== 'PATCH') {
+        sendJson(response, 405, { error: 'Metode tidak diizinkan.' })
+        return
+      }
+      const id = Number(url.pathname.slice('/api/admin/ecosystem-registrations/'.length))
+      if (!Number.isSafeInteger(id) || id < 1) {
+        sendJson(response, 400, { error: 'ID pendaftaran tidak valid.' })
+        return
+      }
+      const body = await readJson(request)
+      if (body.error) {
+        sendJson(response, body.error.status, { error: body.error.message })
+        return
+      }
+      const status = body.value?.status
+      if (!['pending_review', 'verified', 'rejected'].includes(status)) {
+        sendJson(response, 400, { error: 'Status pendaftaran tidak valid.' })
+        return
+      }
+      const update = database.prepare(
+        'UPDATE ecosystem_registrations SET status = ? WHERE id = ?',
+      ).run(status, id)
+      if (update.changes === 0) {
+        sendJson(response, 404, { error: 'Pendaftaran tidak ditemukan.' })
+        return
+      }
+      sendJson(response, 200, { id, status })
+      return
+    }
+
     if (request.method === 'GET' && url.pathname === '/api/admin/submissions') {
       if (!requireAdmin(request, response, adminApiKey)) return
 
       const type = url.searchParams.get('type') || 'registrations'
-      if (!['registrations', 'messages'].includes(type)) {
+      if (!['registrations', 'messages', 'ecosystem'].includes(type)) {
         sendJson(response, 400, { error: 'Jenis data tidak valid.' })
         return
       }
@@ -364,6 +885,21 @@ export function createApiServer({ database, adminApiKey = process.env.ADMIN_API_
       const beforeId = rawBeforeId === null ? Number.MAX_SAFE_INTEGER : Number(rawBeforeId)
       if (!Number.isSafeInteger(beforeId) || beforeId < 1) {
         sendJson(response, 400, { error: 'beforeId tidak valid.' })
+        return
+      }
+
+      if (type === 'ecosystem') {
+        const items = database.prepare(`
+          SELECT ${ECOSYSTEM_FIELDS}
+          FROM ecosystem_registrations
+          WHERE id < ?
+          ORDER BY id DESC
+          LIMIT ?
+        `).all(beforeId, rawLimit).map(formatEcosystemRegistration)
+        sendJson(response, 200, {
+          items,
+          nextBeforeId: items.length === rawLimit ? items.at(-1).id : null,
+        })
         return
       }
 

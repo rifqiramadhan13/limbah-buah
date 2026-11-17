@@ -6,6 +6,12 @@ export const WASTE_PRODUCER_TYPES = [
   'Lainnya',
 ]
 
+export const ECOSYSTEM_ROLES = {
+  supplier: 'Pemasok limbah organik',
+  processor: 'Mitra pengolah limbah organik',
+  buyer: 'Pengguna hasil olahan limbah organik',
+}
+
 export const FRUIT_TYPES = [
   'Kulit jeruk',
   'Kulit pisang',
@@ -13,6 +19,15 @@ export const FRUIT_TYPES = [
   'Kulit mangga',
   'Kulit apel',
   'Campuran kulit buah',
+  'Lainnya',
+]
+
+export const ORGANIC_PRODUCTS = [
+  'Kompos',
+  'Pupuk organik cair',
+  'Pakan ternak',
+  'Biogas',
+  'Bahan baku industri',
   'Lainnya',
 ]
 

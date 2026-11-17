@@ -7,6 +7,8 @@ import { pathToFileURL } from 'node:url'
 import { after, before, test } from 'node:test'
 import { createApiServer } from '../server/app.js'
 import { createDatabase } from '../server/database.js'
+import { geocodeAddress } from '../server/geocoding.js'
+import { MALANG_SEED_LOCATIONS, seedMalangLocations } from '../server/malang-locations.js'
 
 const validRegistration = {
   fullName: 'Rina Contoh',
@@ -38,6 +40,27 @@ const validPartner = {
   capacityKg: 250,
   verificationStatus: 'verified',
   isLocationPublic: true,
+}
+
+const validEcosystemRegistration = {
+  role: 'supplier',
+  fullName: 'Rina Contoh',
+  businessName: 'Pemasok Jeruk',
+  whatsapp: '+62 812 3456 7890',
+  email: 'rina@example.com',
+  province: 'Jawa Barat',
+  city: 'Bandung',
+  district: 'Coblong',
+  village: 'Dago',
+  address: 'Jalan Contoh Nomor 1',
+  producerType: 'Usaha makanan dan minuman',
+  wasteTypes: ['Kulit jeruk'],
+  quantityKg: '12.5',
+  frequency: 'Setiap hari',
+  wasteCondition: 'Baru dipisahkan dan relatif segar',
+  notes: '',
+  consent: true,
+  directoryConsent: true,
 }
 
 let database
@@ -330,4 +353,209 @@ test('rejects invalid or unpublishable partner location data', async () => {
   assert.ok(body.details.some((detail) => detail.startsWith('Latitude')))
   assert.ok(body.details.some((detail) => detail.startsWith('Longitude')))
   assert.ok(body.details.some((detail) => detail.startsWith('Tautan lokasi')))
+})
+
+test('registers all ecosystem roles and only publishes consented, reviewed profiles', async () => {
+  const registrations = [
+    validEcosystemRegistration,
+    {
+      ...validEcosystemRegistration,
+      role: 'processor',
+      businessName: 'Pengolah Kompos',
+      producerType: undefined,
+      wasteTypes: ['Kulit jeruk', 'Kulit pisang'],
+      productTypes: ['Kompos'],
+      processingType: 'Pengomposan aerobik',
+      quantityKg: undefined,
+      capacityKg: '250',
+      wasteCondition: undefined,
+    },
+    {
+      ...validEcosystemRegistration,
+      role: 'buyer',
+      businessName: 'Pengguna Kompos',
+      producerType: undefined,
+      wasteTypes: undefined,
+      productTypes: undefined,
+      productType: 'Kompos',
+      quantityKg: '40',
+      capacityKg: undefined,
+      wasteCondition: undefined,
+      directoryConsent: false,
+    },
+  ]
+  const created = []
+  for (const registration of registrations) {
+    const response = await fetch(`${baseUrl}/api/ecosystem/registrations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(registration),
+    })
+    const body = await response.json()
+    assert.equal(response.status, 201)
+    created.push(database.prepare(
+      'SELECT id, role FROM ecosystem_registrations WHERE registration_code = ?',
+    ).get(body.registrationCode))
+  }
+
+  const adminHeaders = {
+    Authorization: `Bearer ${'a'.repeat(64)}`,
+    'Content-Type': 'application/json',
+  }
+  for (const registration of created) {
+    const response = await fetch(`${baseUrl}/api/admin/ecosystem-registrations/${registration.id}`, {
+      method: 'PATCH',
+      headers: adminHeaders,
+      body: JSON.stringify({ status: 'verified' }),
+    })
+    assert.equal(response.status, 200)
+  }
+
+  const directory = await fetch(`${baseUrl}/api/ecosystem/directory`)
+  const directoryBody = await directory.json()
+  assert.deepEqual(directoryBody.items.map((item) => item.role).sort(), ['processor', 'supplier'])
+  assert.equal(directoryBody.items[0].address, undefined)
+  assert.equal(directoryBody.items[0].fullName, undefined)
+  assert.equal(directoryBody.items[0].whatsapp, validEcosystemRegistration.whatsapp)
+  const admin = await fetch(`${baseUrl}/api/admin/submissions?type=ecosystem`, {
+    headers: adminHeaders,
+  })
+  assert.equal((await admin.json()).items.length, 3)
+})
+
+test('seeds five Malang partners idempotently without guessed coordinates', async () => {
+  seedMalangLocations(database)
+  seedMalangLocations(database)
+  const rows = database.prepare(`
+    SELECT name, address, whatsapp, google_maps_url AS googleMapsUrl,
+      latitude, longitude, location_status AS locationStatus,
+      verification_status AS verificationStatus
+    FROM ecosystem_seed_locations
+    ORDER BY id
+  `).all()
+
+  assert.equal(rows.length, 5)
+  assert.deepEqual(rows.map((item) => item.name), MALANG_SEED_LOCATIONS.map((item) => item.name))
+  assert.ok(rows.every((item) => item.latitude === null && item.longitude === null))
+  assert.ok(rows.every((item) => item.locationStatus === 'unverified'))
+  assert.ok(rows.every((item) => item.verificationStatus === 'pending'))
+
+  const mapResponse = await fetch(`${baseUrl}/api/ecosystem/map`)
+  const map = await mapResponse.json()
+  assert.equal(map.items.length, 0)
+  assert.ok(map.filters.districts.includes('Dau'))
+  assert.ok(map.filters.processingTypes.includes('Budidaya maggot BSF'))
+
+  const adminHeaders = {
+    Authorization: `Bearer ${'a'.repeat(64)}`,
+    'Content-Type': 'application/json',
+  }
+  const unverified = await fetch(`${baseUrl}/api/admin/ecosystem-seeds/1`, {
+    method: 'PATCH',
+    headers: adminHeaders,
+    body: JSON.stringify({
+      latitude: null,
+      longitude: null,
+      verificationStatus: 'verified',
+      isLocationPublic: true,
+    }),
+  })
+  assert.equal(unverified.status, 400)
+
+  const verified = await fetch(`${baseUrl}/api/admin/ecosystem-seeds/1`, {
+    method: 'PATCH',
+    headers: adminHeaders,
+    body: JSON.stringify({
+      latitude: -7.95,
+      longitude: 112.61,
+      verificationStatus: 'verified',
+      isLocationPublic: true,
+    }),
+  })
+  assert.equal(verified.status, 200)
+  const publishedMap = await fetch(`${baseUrl}/api/ecosystem/map`)
+  const publishedBody = await publishedMap.json()
+  assert.equal(publishedBody.items.length, 1)
+  assert.equal(publishedBody.items[0].id, 'seed:1')
+})
+
+test('shows a consented, reviewed location and database statistics on the map', async () => {
+  const registration = {
+    ...validEcosystemRegistration,
+    latitude: -7.95,
+    longitude: 112.61,
+    locationConfirmed: true,
+    mapConsent: true,
+  }
+  const response = await fetch(`${baseUrl}/api/ecosystem/registrations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(registration),
+  })
+  const created = await response.json()
+  assert.equal(response.status, 201)
+  const saved = database.prepare(
+    'SELECT id FROM ecosystem_registrations WHERE registration_code = ?',
+  ).get(created.registrationCode)
+  const adminHeaders = {
+    Authorization: `Bearer ${'a'.repeat(64)}`,
+    'Content-Type': 'application/json',
+  }
+  const reviewed = await fetch(`${baseUrl}/api/admin/ecosystem-registrations/${saved.id}`, {
+    method: 'PATCH',
+    headers: adminHeaders,
+    body: JSON.stringify({ status: 'verified' }),
+  })
+  assert.equal(reviewed.status, 200)
+
+  const mapResponse = await fetch(`${baseUrl}/api/ecosystem/map?district=coblong`)
+  const map = await mapResponse.json()
+  assert.equal(map.items.length, 1)
+  assert.equal(map.items[0].id, `registration:${saved.id}`)
+  assert.equal(map.items[0].latitude, registration.latitude)
+  assert.equal(map.items[0].email, undefined)
+  assert.equal(map.stats.verifiedLocations, 2)
+})
+
+test('caches rooftop geocodes and refuses interpolated coordinates', async () => {
+  const geocodeDatabase = createDatabase(':memory:')
+  const originalFetch = globalThis.fetch
+  let requests = 0
+  globalThis.fetch = async () => {
+    requests += 1
+    return Response.json({
+      status: 'OK',
+      results: [{
+        formatted_address: 'Verified address, Indonesia',
+        geometry: {
+          location_type: 'ROOFTOP',
+          location: { lat: -7.95, lng: 112.61 },
+        },
+      }],
+    })
+  }
+
+  try {
+    const first = await geocodeAddress(geocodeDatabase, 'Jalan Uji, Malang', 'test-key')
+    const second = await geocodeAddress(geocodeDatabase, ' jalan uji,   malang ', 'test-key')
+    assert.equal(first.status, 'google_verified')
+    assert.equal(second.status, 'google_verified')
+    assert.equal(requests, 1)
+    globalThis.fetch = async () => Response.json({
+      status: 'OK',
+      results: [{
+        geometry: {
+          location_type: 'RANGE_INTERPOLATED',
+          location: { lat: -7.96, lng: 112.62 },
+        },
+      }],
+    })
+    const approximate = await geocodeAddress(geocodeDatabase, 'Approximate address, Malang', 'test-key')
+    assert.equal(approximate.status, 'unverified')
+    assert.equal(approximate.latitude, null)
+    assert.equal(approximate.longitude, null)
+  } finally {
+    globalThis.fetch = originalFetch
+    geocodeDatabase.close()
+  }
 })

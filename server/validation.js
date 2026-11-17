@@ -1,6 +1,8 @@
 import {
   CONTACT_CATEGORIES,
+  ECOSYSTEM_ROLES,
   FRUIT_TYPES,
+  ORGANIC_PRODUCTS,
   PRODUCTION_FREQUENCIES,
   WASTE_CONDITIONS,
   WASTE_PRODUCER_TYPES,
@@ -179,6 +181,129 @@ export function validateWasteRegistration(payload) {
     errors.push('Kondisi limbah tidak valid.')
   }
   if (!registration.consent) errors.push('Persetujuan penggunaan data wajib diberikan.')
+
+  return errors.length ? { errors } : { value: registration }
+}
+
+export function validateEcosystemRegistration(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { errors: ['Isi formulir tidak valid.'] }
+  }
+
+  const errors = []
+  const registration = {
+    role: text(payload.role, 20, errors, 'Peran'),
+    fullName: text(payload.fullName, 120, errors, 'Nama lengkap'),
+    businessName: text(payload.businessName, 160, errors, 'Nama usaha/instansi'),
+    whatsapp: text(payload.whatsapp, 30, errors, 'Nomor WhatsApp'),
+    email: text(payload.email, 254, errors, 'Email').toLowerCase(),
+    province: text(payload.province, 100, errors, 'Provinsi'),
+    city: text(payload.city, 100, errors, 'Kabupaten/kota'),
+    district: text(payload.district, 100, errors, 'Kecamatan'),
+    village: text(payload.village, 100, errors, 'Desa/kelurahan'),
+    address: text(payload.address, 500, errors, 'Alamat lengkap'),
+    producerType: text(payload.producerType, 80, errors, 'Jenis penghasil limbah'),
+    productType: text(payload.productType, 100, errors, 'Jenis produk'),
+    processingType: text(payload.processingType, 120, errors, 'Jenis pengolahan'),
+    quantityKg: payload.quantityKg === undefined || payload.quantityKg === '' ? null : Number(payload.quantityKg),
+    capacityKg: payload.capacityKg === undefined || payload.capacityKg === '' ? null : Number(payload.capacityKg),
+    frequency: text(payload.frequency, 80, errors, 'Frekuensi'),
+    wasteCondition: text(payload.wasteCondition, 100, errors, 'Kondisi limbah'),
+    notes: text(payload.notes, 1000, errors, 'Keterangan tambahan'),
+    consent: payload.consent === true,
+    directoryConsent: payload.directoryConsent === true,
+    mapConsent: payload.mapConsent === true,
+    locationConfirmed: payload.locationConfirmed === true,
+    latitude: nullableCoordinate(payload.latitude, 'Latitude', -90, 90, errors),
+    longitude: nullableCoordinate(payload.longitude, 'Longitude', -180, 180, errors),
+    wasteTypes: payload.wasteTypes,
+    productTypes: payload.productTypes,
+  }
+
+  if (!isChoice(registration.role, Object.keys(ECOSYSTEM_ROLES))) {
+    errors.push('Peran pendaftar tidak valid.')
+  }
+  if (!registration.fullName) errors.push('Nama lengkap wajib diisi.')
+  if (!isValidPhone(registration.whatsapp)) errors.push('Nomor WhatsApp tidak valid.')
+  if (!isValidEmail(registration.email)) errors.push('Format email tidak valid.')
+  if (!registration.province) errors.push('Provinsi wajib diisi.')
+  if (!registration.city) errors.push('Kabupaten/kota wajib diisi.')
+  if (!registration.district) errors.push('Kecamatan wajib diisi.')
+  if (!registration.village) errors.push('Desa/kelurahan wajib diisi.')
+  if (!registration.address) errors.push('Alamat lengkap wajib diisi.')
+  if (!isChoice(registration.frequency, PRODUCTION_FREQUENCIES)) {
+    errors.push('Frekuensi tidak valid.')
+  }
+  if (!registration.consent) errors.push('Persetujuan penggunaan data wajib diberikan.')
+  if ((registration.latitude === null) !== (registration.longitude === null)) {
+    errors.push('Titik lokasi harus memiliki latitude dan longitude.')
+  }
+  if (
+    registration.latitude !== null
+    && registration.longitude !== null
+    && !registration.locationConfirmed
+  ) {
+    errors.push('Konfirmasi titik lokasi sebelum mengirim pendaftaran.')
+  }
+  if (
+    registration.mapConsent
+    && (registration.latitude === null || registration.longitude === null)
+  ) {
+    errors.push('Pilih dan konfirmasi titik lokasi sebelum mengizinkan publikasi peta.')
+  }
+
+  const validateTypes = (types, options, label) => {
+    if (!Array.isArray(types) || types.length === 0) {
+      errors.push(`Pilih setidaknya satu ${label}.`)
+      return []
+    }
+    const uniqueTypes = [...new Set(types)]
+    if (uniqueTypes.some((type) => !isChoice(type, options))) {
+      errors.push(`${label[0].toUpperCase()}${label.slice(1)} tidak valid.`)
+    }
+    return uniqueTypes
+  }
+
+  if (registration.role === 'supplier') {
+    if (!isChoice(registration.producerType, WASTE_PRODUCER_TYPES)) {
+      errors.push('Jenis penghasil limbah tidak valid.')
+    }
+    registration.wasteTypes = validateTypes(registration.wasteTypes, FRUIT_TYPES, 'jenis limbah')
+    if (!Number.isFinite(registration.quantityKg) || registration.quantityKg <= 0 || registration.quantityKg > 10000000) {
+      errors.push('Jumlah limbah harus lebih dari 0 dan maksimal 10.000.000 kg.')
+    }
+    if (!isChoice(registration.wasteCondition, WASTE_CONDITIONS)) {
+      errors.push('Kondisi limbah tidak valid.')
+    }
+    registration.productTypes = []
+    registration.productType = ''
+    registration.processingType = ''
+    registration.capacityKg = null
+  } else if (registration.role === 'processor') {
+    registration.wasteTypes = validateTypes(registration.wasteTypes, FRUIT_TYPES, 'jenis limbah')
+    registration.productTypes = validateTypes(registration.productTypes, ORGANIC_PRODUCTS, 'jenis produk')
+    if (!registration.processingType) errors.push('Jenis pengolahan wajib diisi.')
+    if (!Number.isFinite(registration.capacityKg) || registration.capacityKg <= 0 || registration.capacityKg > 10000000) {
+      errors.push('Kapasitas pengolahan harus lebih dari 0 dan maksimal 10.000.000 kg.')
+    }
+    registration.producerType = ''
+    registration.productType = ''
+    registration.quantityKg = null
+    registration.wasteCondition = ''
+  } else if (registration.role === 'buyer') {
+    if (!isChoice(registration.productType, ORGANIC_PRODUCTS)) {
+      errors.push('Jenis produk yang dibutuhkan tidak valid.')
+    }
+    if (!Number.isFinite(registration.quantityKg) || registration.quantityKg <= 0 || registration.quantityKg > 10000000) {
+      errors.push('Jumlah kebutuhan harus lebih dari 0 dan maksimal 10.000.000 kg.')
+    }
+    registration.wasteTypes = []
+    registration.productTypes = []
+    registration.producerType = ''
+    registration.processingType = ''
+    registration.capacityKg = null
+    registration.wasteCondition = ''
+  }
 
   return errors.length ? { errors } : { value: registration }
 }

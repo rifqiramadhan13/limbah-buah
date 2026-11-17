@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import ContactSection from './ContactSection.jsx'
+import EcosystemMapPage from './EcosystemMapPage.jsx'
 import EducationTopics from './EducationTopics.jsx'
 import PartnerMapSection from './PartnerMapSection.jsx'
 import RegistrationPage from './RegistrationPage.jsx'
@@ -133,6 +134,7 @@ const navItems = [
   ['Tentang', '#tentang'],
   ['Cara Kerja', '#cara-kerja'],
   ['Fitur', '#fitur'],
+  ['Peta Ekosistem', '/peta-ekosistem'],
   ['Peta Mitra', '#peta-mitra'],
   ['Edukasi', '#edukasi'],
   ['Kontak', '#kontak'],
@@ -218,6 +220,9 @@ function App() {
 
   if (pathname === '/daftar-limbah') {
     return <RegistrationPage onHomeClick={returnHome} />
+  }
+  if (pathname === '/peta-ekosistem') {
+    return <EcosystemMapPage onHomeClick={returnHome} />
   }
 
   return (

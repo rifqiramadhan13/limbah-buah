@@ -1,6 +1,6 @@
 # SIRKULIT
 
-SIRKULIT adalah aplikasi React/Vite untuk menghubungkan penghasil limbah kulit buah dengan mitra pengolah. Beranda existing tetap dipertahankan; penambahan ini menyediakan pendaftaran limbah dan formulir kontak yang terhubung ke API Node.js dan SQLite.
+SIRKULIT adalah aplikasi React/Vite untuk menghubungkan pemasok limbah organik, mitra pengolah, dan pengguna hasil olahan. Beranda existing tetap dipertahankan; pendaftaran, direktori, peta ekosistem Malang, dan formulir kontak terhubung ke API Node.js dan SQLite.
 
 ## Menjalankan aplikasi lokal
 
@@ -33,17 +33,38 @@ Persyaratan: Node.js 22.13 atau lebih baru.
 ## API dan akses data administrator
 
 - `POST /api/waste-registrations` menyimpan pendaftaran tanpa memerlukan akun. Status awal `pending_review` (Menunggu Peninjauan); kode registrasi dikembalikan hanya setelah penyimpanan berhasil.
+- `POST /api/ecosystem/registrations` menyimpan pendaftaran pemasok (`supplier`), mitra pengolah (`processor`), dan pengguna hasil olahan (`buyer`) pada tabel tambahan, tanpa menghapus data lama.
+- `GET /api/ecosystem/directory` menampilkan profil yang telah diverifikasi dan disetujui untuk publikasi. Filter tersedia lewat `q`, `region`, dan `role`.
+- `GET /api/admin/submissions?type=ecosystem` menampilkan pendaftaran ekosistem. `PATCH /api/admin/ecosystem-registrations/:id` memperbarui status tinjauan.
 - `POST /api/contact-messages` menyimpan pesan untuk ditinjau pengelola.
 - `GET /api/admin/submissions?type=registrations` menampilkan pendaftaran.
 - `GET /api/admin/submissions?type=messages` menampilkan pesan kontak.
 - Endpoint admin menerima `Authorization: Bearer <ADMIN_API_KEY>`, mendukung `limit` (maksimal 100) dan paginasi `beforeId`. Data pribadi tidak disertakan dalam respons publik.
 - Jika `ADMIN_API_KEY` kosong, endpoint admin menolak akses dengan status 503. Jangan menaruh kunci admin di frontend atau repository.
 
-API menggunakan validasi server, batas ukuran request, rate limit per alamat, dan respons JSON tanpa cache. Untuk deployment, gunakan HTTPS, simpan secret pada konfigurasi server, arahkan `/api` melalui reverse proxy ke API, sediakan fallback SPA ke `index.html` untuk rute `/daftar-limbah`, dan pastikan disk database persisten serta hanya dapat diakses akun server. Integrasi ini menggunakan kunci API admin karena project belum memiliki autentikasi; hubungkan endpoint ke autentikasi dan otorisasi berbasis role saat dashboard admin tersedia.
+API menggunakan validasi server, batas ukuran request, rate limit per alamat, dan respons JSON tanpa cache. Untuk deployment, gunakan HTTPS, simpan secret pada konfigurasi server, arahkan `/api` melalui reverse proxy ke API, sediakan fallback SPA ke `index.html` untuk rute `/daftar-limbah` dan `/peta-ekosistem`, dan pastikan disk database persisten serta hanya dapat diakses akun server. Integrasi ini menggunakan kunci API admin karena project belum memiliki autentikasi; hubungkan endpoint ke autentikasi dan otorisasi berbasis role saat dashboard admin tersedia.
 
 Kontak resmi belum disediakan. Isi objek `contactInfo` di `src/ContactSection.jsx` hanya dengan nomor WhatsApp, email, alamat, tautan peta, atau akun media sosial resmi yang telah diverifikasi.
 
-## Peta mitra
+## Peta ekosistem Malang
+
+- Halaman peta tersedia di `/peta-ekosistem`; direktori menghubungkan profil yang memiliki titik lokasi ke peta.
+- `GET /api/ecosystem/map` menyediakan marker yang telah diverifikasi dan disetujui untuk publikasi, ringkasan statistik dari database, serta opsi filter.
+- `POST /api/ecosystem/geocode` menggunakan Google Geocoding API dan cache alamat. Hanya hasil presisi `ROOFTOP` yang ditandai terverifikasi Google; hasil yang kurang presisi tidak menjadi marker.
+- Formulir meminta persetujuan publikasi peta secara terpisah. Pendaftar dapat memilih titik secara manual; semua profil tetap menunggu tinjauan pengelola sebelum ditampilkan.
+- Lima mitra awal tersimpan idempotent pada tabel `ecosystem_seed_locations`. Koordinatnya sengaja kosong dan lokasi tidak tampil sampai koordinat diverifikasi; admin dapat mengelolanya melalui `GET /api/admin/ecosystem-seeds` dan `PATCH /api/admin/ecosystem-seeds/:id`.
+- Peta memakai Leaflet/OpenStreetMap yang sudah digunakan project. Geocoding memakai Google server-side; tanpa key, alamat dapat diverifikasi dengan memilih titik secara manual.
+
+Untuk mengaktifkan Google Geocoding, isi `.env` lokal dengan:
+
+```env
+GOOGLE_GEOCODING_API_KEY=server-side-key
+VITE_GOOGLE_MAPS_API_KEY=browser-key
+```
+
+Batasi key server ke Google Geocoding API dan penggunaan server sesuai aturan Google Cloud. Batasi key browser dengan HTTP referrer untuk domain website dan hanya izinkan Google Maps JavaScript API. Key `VITE_` tersedia pada bundle browser; jangan gunakan key server atau `ADMIN_API_KEY` di sana. Tanpa key browser, peta beralih ke Leaflet/OpenStreetMap yang sudah digunakan project.
+
+## Peta mitra lama
 
 - `GET /api/partners` mengembalikan hanya mitra berstatus `verified`, lokasi berstatus publik, dan koordinat yang tersedia. Filter database: `q` (nama), `region`, dan `fruitType`.
 - `GET /api/admin/partners` menampilkan seluruh data mitra untuk integrasi pengelolaan admin.

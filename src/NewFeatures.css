@@ -293,6 +293,60 @@
   line-height: 1.5;
 }
 
+.location-verification-fieldset {
+  display: grid;
+  gap: 12px;
+}
+
+.location-picker-help {
+  margin: -4px 0 2px;
+  color: #70756d;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.location-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.location-picker-map {
+  width: 100%;
+  height: 350px;
+  border: 1px solid #d6d8cf;
+  background: #e8ebe4;
+}
+
+.location-picker-status {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.location-picker-success {
+  color: #254f3a;
+  border-color: #b7c8b4;
+  background: #edf2e9;
+}
+
+.location-picker-error {
+  color: #813d2f;
+  border-color: #d7b6ac;
+  background: #f8eeeb;
+}
+
+.location-picker-coordinates {
+  margin: -3px 0 0;
+  color: #596154;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 1000px) {
   .registration-promo-content {
     gap: 30px;
@@ -381,5 +435,13 @@
 
   .contact-form-card {
     padding: 21px 17px;
+  }
+
+  .location-picker-map {
+    height: 285px;
+  }
+
+  .location-picker-actions > .button {
+    width: 100%;
   }
 }
