@@ -1,10 +1,13 @@
+import { resolve } from 'node:path'
 import { createDatabase } from './database.js'
 import { createApiServer } from './app.js'
 import { seedMalangLocations, verifyMalangSeedLocations } from './malang-locations.js'
 
 const database = createDatabase(process.env.DATABASE_PATH || undefined)
 seedMalangLocations(database)
-const server = createApiServer({ database })
+const staticDirectory = process.env.STATIC_DIRECTORY
+  || (process.env.NODE_ENV === 'production' ? resolve('dist') : '')
+const server = createApiServer({ database, staticDirectory })
 const port = Number(process.env.PORT || 3001)
 const host = process.env.HOST || '127.0.0.1'
 

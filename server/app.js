@@ -1,5 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer } from 'node:http'
+import { readFile } from 'node:fs/promises'
+import { extname, isAbsolute, relative, resolve } from 'node:path'
 import {
   validateContactMessage,
   validateEcosystemRegistration,
@@ -12,6 +14,17 @@ import { ECOSYSTEM_ROLES, FRUIT_TYPES, ORGANIC_PRODUCTS } from '../shared/form-o
 const MAX_BODY_BYTES = 16 * 1024
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 const RATE_LIMIT_MAX_REQUESTS = 8
+const STATIC_CONTENT_TYPES = {
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.js': 'text/javascript; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+}
 const REGISTRATION_FIELDS = `
   id, registration_code AS registrationCode, full_name AS fullName,
   business_name AS businessName, whatsapp, email, producer_type AS producerType,
@@ -115,6 +128,45 @@ function requireAdmin(request, response, configuredKey) {
   return true
 }
 
+async function sendStaticFile(response, pathname, staticDirectory) {
+  let decodedPath
+  try {
+    decodedPath = decodeURIComponent(pathname)
+  } catch {
+    sendJson(response, 400, { error: 'Path tidak valid.' })
+    return
+  }
+
+  const root = resolve(staticDirectory)
+  const requestedPath = resolve(root, `.${decodedPath}`)
+  const relativePath = relative(root, requestedPath)
+  if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    sendJson(response, 404, { error: 'Resource tidak ditemukan.' })
+    return
+  }
+
+  let filePath = requestedPath
+  let content
+  try {
+    content = await readFile(filePath)
+  } catch (error) {
+    if (error.code !== 'ENOENT' && error.code !== 'EISDIR') throw error
+    if (extname(decodedPath)) {
+      sendJson(response, 404, { error: 'Resource tidak ditemukan.' })
+      return
+    }
+    filePath = resolve(root, 'index.html')
+    content = await readFile(filePath)
+  }
+
+  response.writeHead(200, {
+    'Cache-Control': decodedPath.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+    'Content-Type': STATIC_CONTENT_TYPES[extname(filePath)] || 'application/octet-stream',
+    'X-Content-Type-Options': 'nosniff',
+  })
+  response.end(content)
+}
+
 function formatPartner(row) {
   return {
     ...row,
@@ -158,7 +210,11 @@ function createRateLimiter() {
   }
 }
 
-export function createApiServer({ database, adminApiKey = process.env.ADMIN_API_KEY } = {}) {
+export function createApiServer({
+  database,
+  adminApiKey = process.env.ADMIN_API_KEY,
+  staticDirectory = '',
+} = {}) {
   if (!database) throw new Error('Database harus tersedia untuk menjalankan API.')
 
   const allowRequest = createRateLimiter()
@@ -923,6 +979,11 @@ export function createApiServer({ database, adminApiKey = process.env.ADMIN_API_
 
     if (url.pathname.startsWith('/api/')) {
       sendJson(response, 404, { error: 'Endpoint tidak ditemukan.' })
+      return
+    }
+
+    if (request.method === 'GET' && staticDirectory) {
+      await sendStaticFile(response, url.pathname, staticDirectory)
       return
     }
 

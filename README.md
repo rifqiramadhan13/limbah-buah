@@ -30,6 +30,12 @@ Persyaratan: Node.js 22.13 atau lebih baru.
    npm run build
    ```
 
+## Deploy publik ke Render
+
+Repository ini menyediakan Blueprint Render di `render.yaml`. Di Render, buat **New > Blueprint Instance**, hubungkan repository ini, lalu pilih Blueprint tersebut. Blueprint membangun frontend dan menjalankan API pada satu layanan, menggunakan disk persisten 1 GB untuk SQLite, serta membuat `ADMIN_API_KEY` secara otomatis. Layanan memakai paket berbayar karena database memerlukan disk persisten; tinjau harga Render sebelum konfirmasi.
+
+Setelah deploy selesai, URL `onrender.com` dapat dibagikan. Formulir publik dapat menyimpan data pribadi ke database; pastikan pemberitahuan privasi dan persetujuan yang diperlukan tersedia sebelum membagikan URL. Jangan mengubah `ADMIN_API_KEY` menjadi variabel `VITE_` atau menaruhnya di browser.
+
 ## API dan akses data administrator
 
 - `POST /api/waste-registrations` menyimpan pendaftaran tanpa memerlukan akun. Status awal `pending_review` (Menunggu Peninjauan); kode registrasi dikembalikan hanya setelah penyimpanan berhasil.
