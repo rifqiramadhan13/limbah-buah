@@ -224,7 +224,7 @@ function createRateLimiter() {
   }
 }
 
-export function createApiServer({
+export function createApiHandler({
   database,
   adminApiKey = process.env.ADMIN_API_KEY,
   staticDirectory = '',
@@ -233,7 +233,7 @@ export function createApiServer({
 
   const allowRequest = createRateLimiter()
 
-  return createServer(async (request, response) => {
+  return async (request, response) => {
     try {
     const url = new URL(request.url, 'http://localhost')
 
@@ -272,7 +272,7 @@ export function createApiServer({
         return
       }
 
-      const registration = database.prepare(`
+      const registration = await database.prepare(`
         SELECT registration_code AS registrationCode, whatsapp, status,
           created_at AS createdAt
         FROM waste_registrations
@@ -362,7 +362,7 @@ export function createApiServer({
 
         const registration = result.value
         const registrationCode = createReferenceCode('SK')
-        database.prepare(`
+        await database.prepare(`
           INSERT INTO waste_registrations (
             registration_code, full_name, business_name, whatsapp, email, producer_type,
             province, city, district, village, address, fruit_type, quantity_kg,
@@ -407,7 +407,7 @@ export function createApiServer({
         const latitude = registration.mapConsent ? registration.latitude : null
         const longitude = registration.mapConsent ? registration.longitude : null
         const cachedGeocode = registration.mapConsent
-          ? getCachedGeocode(database, completeRegistrationAddress(registration))
+          ? await getCachedGeocode(database, completeRegistrationAddress(registration))
           : null
         const geocodeMatches = cachedGeocode?.status === 'google_verified'
           && Math.abs(cachedGeocode.latitude - latitude) < 0.000001
@@ -415,7 +415,7 @@ export function createApiServer({
         const locationStatus = latitude === null
           ? 'unverified'
           : geocodeMatches ? 'google_verified' : 'user_confirmed'
-        database.prepare(`
+        await database.prepare(`
           INSERT INTO ecosystem_registrations (
             registration_code, role, full_name, business_name, whatsapp, email,
             province, city, district, village, address, producer_type, waste_types,
@@ -471,7 +471,7 @@ export function createApiServer({
 
       const contact = result.value
       const messageCode = createReferenceCode('SKC')
-      database.prepare(`
+      await database.prepare(`
         INSERT INTO contact_messages (message_code, name, email, whatsapp, category, message)
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(
@@ -500,7 +500,7 @@ export function createApiServer({
         return
       }
 
-      const rows = database.prepare(`
+      const rows = (await database.prepare(`
         SELECT id, role, full_name AS fullName, business_name AS businessName,
           whatsapp, province, city, waste_types AS wasteTypesJson,
           product_types AS productTypesJson, product_type AS productType,
@@ -513,7 +513,7 @@ export function createApiServer({
           AND (? = '' OR role = ?)
           AND (? = '' OR instr(lower(city || ' ' || province), ?) > 0)
         ORDER BY created_at DESC, id DESC
-      `).all(role, role, region, region).map((row) => {
+      `).all(role, role, region, region)).map((row) => {
         const wasteTypes = JSON.parse(row.wasteTypesJson)
         const productTypes = JSON.parse(row.productTypesJson)
         const item = {
@@ -546,12 +546,12 @@ export function createApiServer({
         return { item, matches: !query || searchable.includes(query) }
       }).filter(({ matches }) => matches).map(({ item }) => item)
 
-      const regions = database.prepare(`
+      const regions = (await database.prepare(`
         SELECT DISTINCT city, province
         FROM ecosystem_registrations
         WHERE status = 'verified' AND directory_consent_at IS NOT NULL
-        ORDER BY province COLLATE NOCASE, city COLLATE NOCASE
-      `).all().map(({ city, province }) => `${city}, ${province}`)
+        ORDER BY lower(province), lower(city)
+      `).all()).map(({ city, province }) => `${city}, ${province}`)
 
       sendJson(response, 200, { items: rows, regions })
       return
@@ -590,7 +590,7 @@ export function createApiServer({
         return
       }
 
-      const partners = database.prepare(`
+      const partners = (await database.prepare(`
         SELECT id, name, address, region, latitude, longitude,
           google_maps_url AS googleMapsUrl,
           accepted_fruit_types AS wasteTypesJson,
@@ -599,7 +599,7 @@ export function createApiServer({
         WHERE verification_status = 'verified'
           AND is_location_public = 1
           AND latitude IS NOT NULL AND longitude IS NOT NULL
-      `).all().map((row) => ({
+      `).all()).map((row) => ({
         id: `partner:${row.id}`,
         source: 'partner',
         role: 'processor',
@@ -621,7 +621,7 @@ export function createApiServer({
         frequency: '',
         notes: '',
       }))
-      const seeds = database.prepare(`
+      const seeds = (await database.prepare(`
         SELECT id, name, address, whatsapp, province, city, district,
           google_maps_url AS googleMapsUrl, processing_type AS processingType,
           latitude, longitude, notes
@@ -629,7 +629,7 @@ export function createApiServer({
         WHERE verification_status = 'verified'
           AND is_location_public = 1
           AND latitude IS NOT NULL AND longitude IS NOT NULL
-      `).all().map((row) => ({
+      `).all()).map((row) => ({
         ...row,
         id: `seed:${row.id}`,
         source: 'seed',
@@ -641,7 +641,7 @@ export function createApiServer({
         capacityKg: null,
         frequency: '',
       }))
-      const registrations = database.prepare(`
+      const registrations = (await database.prepare(`
         SELECT id, role, full_name AS fullName, business_name AS businessName,
           whatsapp, address, province, city, district,
           waste_types AS wasteTypesJson, product_types AS productTypesJson,
@@ -653,7 +653,7 @@ export function createApiServer({
           AND map_consent_at IS NOT NULL
           AND location_status IN ('google_verified', 'user_confirmed')
           AND latitude IS NOT NULL AND longitude IS NOT NULL
-      `).all().map((row) => ({
+      `).all()).map((row) => ({
         ...row,
         id: `registration:${row.id}`,
         source: 'registration',
@@ -686,21 +686,21 @@ export function createApiServer({
         return searchable.includes(filters.q)
       })
 
-      const legacySupplierCount = database.prepare(
+      const legacySupplierCount = (await database.prepare(
         'SELECT COUNT(*) AS count FROM waste_registrations',
-      ).get().count
-      const roleCounts = database.prepare(`
+      ).get()).count
+      const roleCounts = (await database.prepare(`
         SELECT role, COUNT(*) AS count
         FROM ecosystem_registrations
         GROUP BY role
-      `).all().reduce((counts, row) => ({ ...counts, [row.role]: row.count }), {})
-      const partnerCount = database.prepare('SELECT COUNT(*) AS count FROM partners').get().count
-      const seedCount = database.prepare('SELECT COUNT(*) AS count FROM ecosystem_seed_locations').get().count
+      `).all()).reduce((counts, row) => ({ ...counts, [row.role]: row.count }), {})
+      const partnerCount = (await database.prepare('SELECT COUNT(*) AS count FROM partners').get()).count
+      const seedCount = (await database.prepare('SELECT COUNT(*) AS count FROM ecosystem_seed_locations').get()).count
       const totalRegistered = legacySupplierCount
         + Object.values(roleCounts).reduce((sum, count) => sum + count, 0)
         + partnerCount
         + seedCount
-      const seedFilters = database.prepare(`
+      const seedFilters = await database.prepare(`
         SELECT district, city, processing_type AS processingType
         FROM ecosystem_seed_locations
       `).all()
@@ -750,7 +750,7 @@ export function createApiServer({
         return
       }
 
-      const rows = database.prepare(`
+      const rows = (await database.prepare(`
         SELECT ${PARTNER_FIELDS}
         FROM partners
         WHERE verification_status = 'verified'
@@ -759,22 +759,18 @@ export function createApiServer({
           AND longitude IS NOT NULL
           AND (? = '' OR instr(lower(name), lower(?)) > 0)
           AND (? = '' OR lower(region) = lower(?))
-          AND (? = '' OR EXISTS (
-            SELECT 1
-            FROM json_each(partners.accepted_fruit_types) AS fruit
-            WHERE fruit.value = ?
-          ))
-        ORDER BY name COLLATE NOCASE
-      `).all(query, query, region, region, fruitType, fruitType)
-      const regions = database.prepare(`
+        ORDER BY lower(name)
+      `).all(query, query, region, region)).filter((row) =>
+        !fruitType || JSON.parse(row.acceptedFruitTypesJson).includes(fruitType))
+      const regions = (await database.prepare(`
         SELECT DISTINCT region
         FROM partners
         WHERE verification_status = 'verified'
           AND is_location_public = 1
           AND latitude IS NOT NULL
           AND longitude IS NOT NULL
-        ORDER BY region COLLATE NOCASE
-      `).all().map(({ region: partnerRegion }) => partnerRegion)
+        ORDER BY lower(region)
+      `).all()).map(({ region: partnerRegion }) => partnerRegion)
 
       sendJson(response, 200, { items: rows.map(formatPartner), regions })
       return
@@ -784,11 +780,11 @@ export function createApiServer({
       if (!requireAdmin(request, response, adminApiKey)) return
 
       if (request.method === 'GET') {
-        const items = database.prepare(`
+        const items = (await database.prepare(`
           SELECT ${PARTNER_FIELDS}
           FROM partners
           ORDER BY updated_at DESC, id DESC
-        `).all().map(formatPartner)
+        `).all()).map(formatPartner)
         sendJson(response, 200, { items })
         return
       }
@@ -809,7 +805,7 @@ export function createApiServer({
         const partner = result.value
         let partnerId
         if (partner.id) {
-          const update = database.prepare(`
+          const update = await database.prepare(`
             UPDATE partners SET
               name = ?, address = ?, region = ?, latitude = ?, longitude = ?,
               google_maps_url = ?, accepted_fruit_types = ?, capacity_kg = ?,
@@ -835,7 +831,7 @@ export function createApiServer({
           }
           partnerId = partner.id
         } else {
-          const insert = database.prepare(`
+          const insert = await database.prepare(`
             INSERT INTO partners (
               name, address, region, latitude, longitude, google_maps_url,
               accepted_fruit_types, capacity_kg, verification_status, is_location_public
@@ -855,7 +851,7 @@ export function createApiServer({
           partnerId = Number(insert.lastInsertRowid)
         }
 
-        const saved = database.prepare(`
+        const saved = await database.prepare(`
           SELECT ${PARTNER_FIELDS}
           FROM partners
           WHERE id = ?
@@ -874,11 +870,11 @@ export function createApiServer({
         sendJson(response, 405, { error: 'Metode tidak diizinkan.' })
         return
       }
-      const items = database.prepare(`
+      const items = (await database.prepare(`
         SELECT ${SEED_LOCATION_FIELDS}
         FROM ecosystem_seed_locations
-        ORDER BY city COLLATE NOCASE, name COLLATE NOCASE
-      `).all().map((row) => ({
+        ORDER BY lower(city), lower(name)
+      `).all()).map((row) => ({
         ...row,
         isLocationPublic: Boolean(row.isLocationPublic),
       }))
@@ -935,11 +931,11 @@ export function createApiServer({
         return
       }
 
-      const update = database.prepare(`
+      const update = await database.prepare(`
         UPDATE ecosystem_seed_locations SET
           latitude = ?, longitude = ?,
           location_status = CASE
-            WHEN ? IS NULL THEN 'unverified'
+            WHEN CAST(? AS REAL) IS NULL THEN 'unverified'
             WHEN location_status = 'google_verified' THEN 'google_verified'
             ELSE 'admin_verified'
           END,
@@ -950,7 +946,7 @@ export function createApiServer({
         sendJson(response, 404, { error: 'Lokasi awal tidak ditemukan.' })
         return
       }
-      const item = database.prepare(`
+      const item = await database.prepare(`
         SELECT ${SEED_LOCATION_FIELDS}
         FROM ecosystem_seed_locations
         WHERE id = ?
@@ -982,7 +978,7 @@ export function createApiServer({
         sendJson(response, 400, { error: 'Status pendaftaran tidak valid.' })
         return
       }
-      const update = database.prepare(
+      const update = await database.prepare(
         'UPDATE ecosystem_registrations SET status = ? WHERE id = ?',
       ).run(status, id)
       if (update.changes === 0) {
@@ -1016,13 +1012,13 @@ export function createApiServer({
       }
 
       if (type === 'ecosystem') {
-        const items = database.prepare(`
+        const items = (await database.prepare(`
           SELECT ${ECOSYSTEM_FIELDS}
           FROM ecosystem_registrations
           WHERE id < ?
           ORDER BY id DESC
           LIMIT ?
-        `).all(beforeId, rawLimit).map(formatEcosystemRegistration)
+        `).all(beforeId, rawLimit)).map(formatEcosystemRegistration)
         sendJson(response, 200, {
           items,
           nextBeforeId: items.length === rawLimit ? items.at(-1).id : null,
@@ -1033,7 +1029,7 @@ export function createApiServer({
       const isRegistration = type === 'registrations'
       const table = isRegistration ? 'waste_registrations' : 'contact_messages'
       const fields = isRegistration ? REGISTRATION_FIELDS : CONTACT_FIELDS
-      const items = database.prepare(`
+      const items = await database.prepare(`
         SELECT ${fields}
         FROM ${table}
         WHERE id < ?
@@ -1070,5 +1066,9 @@ export function createApiServer({
       }
       sendJson(response, 500, { error: 'Terjadi gangguan server. Silakan coba kembali.' })
     }
-  })
+  }
+}
+
+export function createApiServer(options = {}) {
+  return createServer(createApiHandler(options))
 }

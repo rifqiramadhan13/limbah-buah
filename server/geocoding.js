@@ -4,9 +4,9 @@ function normalizeAddress(address) {
   return address.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
-export function getCachedGeocode(database, address) {
+export async function getCachedGeocode(database, address) {
   const addressHash = createHash('sha256').update(normalizeAddress(address)).digest('hex')
-  const cached = database.prepare(`
+  const cached = await database.prepare(`
     SELECT latitude, longitude, location_status AS status,
       location_type AS locationType, formatted_address AS formattedAddress
     FROM geocode_cache
@@ -19,7 +19,7 @@ export async function geocodeAddress(database, address, apiKey = process.env.GOO
   if (!apiKey) return { status: 'not_configured' }
 
   const addressHash = createHash('sha256').update(normalizeAddress(address)).digest('hex')
-  const cached = getCachedGeocode(database, address)
+  const cached = await getCachedGeocode(database, address)
   if (cached) return cached
 
   const params = new URLSearchParams({ address, region: 'id', key: apiKey })
@@ -32,7 +32,7 @@ export async function geocodeAddress(database, address, apiKey = process.env.GOO
 
   const result = await response.json()
   if (result.status === 'ZERO_RESULTS') {
-    database.prepare(`
+    await database.prepare(`
       INSERT INTO geocode_cache (address_hash, location_status)
       VALUES (?, 'not_found')
     `).run(addressHash)
@@ -53,7 +53,7 @@ export async function geocodeAddress(database, address, apiKey = process.env.GOO
   const longitude = exactMatch ? coordinates.lng : null
   const formattedAddress = match.formatted_address || null
 
-  database.prepare(`
+  await database.prepare(`
     INSERT INTO geocode_cache (
       address_hash, latitude, longitude, location_status, location_type, formatted_address
     ) VALUES (?, ?, ?, ?, ?, ?)
