@@ -102,6 +102,35 @@ test('stores a valid waste registration and returns its review status', async ()
   assert.ok(saved.consent_at)
   assert.equal(JSON.stringify(body).includes(validRegistration.whatsapp), false)
 
+  const statusResponse = await fetch(`${baseUrl}/api/registration-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      registrationCode: body.registrationCode,
+      whatsapp: validRegistration.whatsapp,
+    }),
+  })
+  const statusBody = await statusResponse.json()
+  assert.equal(statusResponse.status, 200)
+  assert.equal(statusBody.registrationCode, body.registrationCode)
+  assert.equal(statusBody.status, 'pending_review')
+  assert.equal(statusBody.statusLabel, 'Menunggu Peninjauan')
+  assert.equal(statusBody.whatsapp, undefined)
+  assert.equal(statusBody.fullName, undefined)
+
+  const wrongPhoneResponse = await fetch(`${baseUrl}/api/registration-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      registrationCode: body.registrationCode,
+      whatsapp: '+62 899 9999 9999',
+    }),
+  })
+  assert.equal(wrongPhoneResponse.status, 404)
+  assert.deepEqual(await wrongPhoneResponse.json(), {
+    error: 'Kode registrasi atau nomor WhatsApp tidak cocok.',
+  })
+
   const publicResponse = await fetch(`${baseUrl}/api/admin/submissions?type=registrations`)
   assert.equal(publicResponse.status, 401)
 
@@ -454,26 +483,64 @@ test('registers all ecosystem roles and only publishes consented, reviewed profi
   assert.equal((await admin.json()).items.length, 3)
 })
 
-test('seeds five Malang partners idempotently without guessed coordinates', async () => {
+test('tracks ecosystem registration status without exposing personal details', async () => {
+  const response = await fetch(`${baseUrl}/api/ecosystem/registrations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(validEcosystemRegistration),
+  })
+  const registration = await response.json()
+
+  const statusResponse = await fetch(`${baseUrl}/api/registration-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      registrationCode: registration.registrationCode,
+      whatsapp: validEcosystemRegistration.whatsapp,
+    }),
+  })
+  const status = await statusResponse.json()
+
+  assert.equal(response.status, 201)
+  assert.equal(statusResponse.status, 200)
+  assert.equal(status.registrationCode, registration.registrationCode)
+  assert.equal(status.status, 'pending_review')
+  assert.equal(status.fullName, undefined)
+  assert.equal(status.whatsapp, undefined)
+})
+
+test('seeds and publishes all five verified Google Maps locations', async () => {
   seedMalangLocations(database)
   seedMalangLocations(database)
   const rows = database.prepare(`
     SELECT name, address, whatsapp, google_maps_url AS googleMapsUrl,
       latitude, longitude, location_status AS locationStatus,
-      verification_status AS verificationStatus
+      verification_status AS verificationStatus,
+      is_location_public AS isLocationPublic
     FROM ecosystem_seed_locations
     ORDER BY id
   `).all()
 
   assert.equal(rows.length, 5)
   assert.deepEqual(rows.map((item) => item.name), MALANG_SEED_LOCATIONS.map((item) => item.name))
-  assert.ok(rows.every((item) => item.latitude === null && item.longitude === null))
-  assert.ok(rows.every((item) => item.locationStatus === 'unverified'))
-  assert.ok(rows.every((item) => item.verificationStatus === 'pending'))
+  rows.forEach((item, index) => {
+    const location = MALANG_SEED_LOCATIONS[index]
+    assert.equal(item.latitude, location.latitude)
+    assert.equal(item.longitude, location.longitude)
+    assert.equal(item.locationStatus, 'google_verified')
+    assert.equal(item.verificationStatus, 'verified')
+    assert.equal(item.isLocationPublic, 1)
+  })
 
   const mapResponse = await fetch(`${baseUrl}/api/ecosystem/map`)
   const map = await mapResponse.json()
-  assert.equal(map.items.length, 0)
+  assert.equal(map.items.length, 5)
+  for (const location of MALANG_SEED_LOCATIONS) {
+    const mapItem = map.items.find((item) => item.name === location.name)
+    assert.ok(mapItem)
+    assert.equal(mapItem.latitude, location.latitude)
+    assert.equal(mapItem.longitude, location.longitude)
+  }
   assert.ok(map.filters.districts.includes('Dau'))
   assert.ok(map.filters.processingTypes.includes('Budidaya maggot BSF'))
 
@@ -506,8 +573,8 @@ test('seeds five Malang partners idempotently without guessed coordinates', asyn
   assert.equal(verified.status, 200)
   const publishedMap = await fetch(`${baseUrl}/api/ecosystem/map`)
   const publishedBody = await publishedMap.json()
-  assert.equal(publishedBody.items.length, 1)
-  assert.equal(publishedBody.items[0].id, 'seed:1')
+  assert.equal(publishedBody.items.length, 5)
+  assert.ok(publishedBody.items.some((item) => item.id === 'seed:1'))
 })
 
 test('shows a consented, reviewed location and database statistics on the map', async () => {
@@ -545,7 +612,7 @@ test('shows a consented, reviewed location and database statistics on the map', 
   assert.equal(map.items[0].id, `registration:${saved.id}`)
   assert.equal(map.items[0].latitude, registration.latitude)
   assert.equal(map.items[0].email, undefined)
-  assert.equal(map.stats.verifiedLocations, 2)
+  assert.equal(map.stats.verifiedLocations, 6)
 })
 
 test('caches rooftop geocodes and refuses interpolated coordinates', async () => {

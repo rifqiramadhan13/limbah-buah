@@ -95,7 +95,17 @@
 }
 
 .nav-actions {
-  gap: 22px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.nav-register-link {
+  align-self: center;
+  color: var(--forest);
+  font-size: 10px;
+  font-weight: 700;
+  text-underline-offset: 3px;
 }
 
 .button {
@@ -1100,6 +1110,8 @@
 
 .education-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 231px;
   padding: 20px 17px 18px;
   border: 1px solid #dedfd5;
@@ -1139,17 +1151,16 @@
 }
 
 .education-card p {
+  margin-bottom: 10px;
   font-size: 10px;
 }
 
 .edu-link {
-  position: absolute;
-  right: 17px;
-  bottom: 16px;
-  left: 17px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
+  margin-top: auto;
   padding-top: 9px;
   color: var(--forest);
   border-top: 1px solid #e4e4dc;
@@ -1162,6 +1173,7 @@
   font-weight: 700;
   letter-spacing: 1px;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -1177,58 +1189,7 @@
   font-size: 9px;
 }
 
-.education-dialog {
-  width: min(820px, calc(100vw - 32px));
-  max-width: none;
-  max-height: min(88vh, 900px);
-  margin: auto;
-  padding: 0;
-  overflow: auto;
-  color: var(--ink);
-  border: 1px solid #dedfd5;
-  background: #fbfaf6;
-  box-shadow: 0 24px 80px rgb(22 34 25 / 25%);
-}
-
-.education-dialog::backdrop {
-  background: rgb(24 34 27 / 62%);
-  backdrop-filter: blur(3px);
-}
-
-.education-dialog-inner {
-  padding: clamp(23px, 5vw, 48px);
-}
-
-.education-dialog-topline {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.education-dialog-topline .eyebrow {
-  margin-bottom: 15px;
-}
-
-.education-dialog-close {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 5px 0 5px 8px;
-  color: var(--forest);
-  border: 0;
-  background: transparent;
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.education-dialog-close span {
-  font-size: 23px;
-  line-height: 1;
-}
-
-.education-dialog h2 {
+.education-article-title {
   margin: 0;
   color: var(--ink);
   font-family: var(--display);
@@ -1238,25 +1199,25 @@
   line-height: 1.15;
 }
 
-.education-dialog-introduction {
+.education-article-introduction {
   margin: 17px 0 27px;
   color: #626a60;
   font-size: 16px;
   line-height: 1.75;
 }
 
-.education-dialog-sections {
+.education-article-sections {
   display: grid;
   gap: 22px;
 }
 
-.education-dialog-section {
+.education-article-section {
   padding-top: 19px;
   border-top: 1px solid #e1e2d9;
 }
 
-.education-dialog-section h3,
-.education-sources h3 {
+.education-article-section h2,
+.education-sources h2 {
   margin: 0 0 10px;
   color: var(--forest);
   font-family: var(--display);
@@ -1265,18 +1226,18 @@
   line-height: 1.3;
 }
 
-.education-dialog-section p {
+.education-article-section p {
   margin: 0 0 11px;
   color: #626a60;
   font-size: 15px;
   line-height: 1.75;
 }
 
-.education-dialog-section p:last-child {
+.education-article-section p:last-child {
   margin-bottom: 0;
 }
 
-.education-dialog-section ul {
+.education-article-section ul {
   margin: 10px 0 0;
   padding-left: 22px;
   color: #626a60;
@@ -2104,11 +2065,7 @@
   }
 
   .edu-link {
-    right: 17px;
-    bottom: 16px;
-    left: auto;
-    width: 90px;
-    border-top: 0;
+    width: 100%;
   }
 
   .education-disclaimer {

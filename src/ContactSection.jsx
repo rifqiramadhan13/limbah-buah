@@ -4,15 +4,17 @@ import { postJson } from './api.js'
 import './NewFeatures.css'
 
 const contactInfo = {
-  whatsappNumber: '',
-  email: '',
+  whatsappNumber: '085706040858',
+  email: 'rifqi12ramadhan@gmail.com',
   address: '',
   mapUrl: '',
   instagramUrl: '',
 }
 
 function formatWhatsapp(number) {
-  return `https://wa.me/${number.replace(/\D/g, '')}`
+  const digits = number.replace(/\D/g, '')
+  const internationalNumber = digits.startsWith('0') ? `62${digits.slice(1)}` : digits
+  return `https://wa.me/${internationalNumber}`
 }
 
 export default function ContactSection() {
@@ -60,11 +62,6 @@ export default function ContactSection() {
               {contactInfo.email
                 ? <a href={`mailto:${contactInfo.email}`}>Email · {contactInfo.email}</a>
                 : <span>Email resmi belum tersedia.</span>}
-              {contactInfo.address
-                ? contactInfo.mapUrl
-                  ? <a href={contactInfo.mapUrl} rel="noreferrer" target="_blank">Alamat pengelola · {contactInfo.address}</a>
-                  : <span>Alamat pengelola · {contactInfo.address}</span>
-                : <span>Alamat pengelola belum tersedia.</span>}
               {contactInfo.instagramUrl && (
                 <a href={contactInfo.instagramUrl} rel="noreferrer" target="_blank">Instagram resmi SIRKULIT</a>
               )}
