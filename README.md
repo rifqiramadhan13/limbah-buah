@@ -2,6 +2,8 @@
 
 SIRKULIT adalah aplikasi React/Vite untuk menghubungkan pemasok limbah organik, mitra pengolah, dan pengguna hasil olahan. Beranda existing tetap dipertahankan; pendaftaran, direktori, peta ekosistem Malang, dan formulir kontak terhubung ke API Node.js dan SQLite.
 
+Bagian pendaftaran menyediakan kalkulator simulasi volume limbah mingguan, bulanan, dan tahunan berdasarkan rata-rata jumlah harian serta hari operasional. Hasilnya merupakan perkiraan, bukan data aktual atau jaminan penjemputan.
+
 ## Menjalankan aplikasi lokal
 
 Persyaratan: Node.js 22.13 atau lebih baru.
@@ -48,9 +50,14 @@ Setelah deploy selesai, URL `onrender.com` dapat dibagikan. Formulir publik dapa
 - Endpoint admin menerima `Authorization: Bearer <ADMIN_API_KEY>`, mendukung `limit` (maksimal 100) dan paginasi `beforeId`. Data pribadi tidak disertakan dalam respons publik.
 - Jika `ADMIN_API_KEY` kosong, endpoint admin menolak akses dengan status 503. Jangan menaruh kunci admin di frontend atau repository.
 
-API menggunakan validasi server, batas ukuran request, rate limit per alamat, dan respons JSON tanpa cache. Untuk deployment, gunakan HTTPS, simpan secret pada konfigurasi server, arahkan `/api` melalui reverse proxy ke API, sediakan fallback SPA ke `index.html` untuk rute `/daftar-limbah` dan `/peta-ekosistem`, dan pastikan disk database persisten serta hanya dapat diakses akun server. Integrasi ini menggunakan kunci API admin karena project belum memiliki autentikasi; hubungkan endpoint ke autentikasi dan otorisasi berbasis role saat dashboard admin tersedia.
+API menggunakan validasi server, batas ukuran request, rate limit per alamat, dan respons JSON tanpa cache. Untuk deployment, gunakan HTTPS, simpan secret pada konfigurasi server, arahkan `/api` melalui reverse proxy ke API, sediakan fallback SPA ke `index.html` untuk rute `/daftar-limbah`, `/peta-ekosistem`, dan `/edukasi`, dan pastikan disk database persisten serta hanya dapat diakses akun server. Integrasi ini menggunakan kunci API admin karena project belum memiliki autentikasi; hubungkan endpoint ke autentikasi dan otorisasi berbasis role saat dashboard admin tersedia.
 
 Kontak resmi belum disediakan. Isi objek `contactInfo` di `src/ContactSection.jsx` hanya dengan nomor WhatsApp, email, alamat, tautan peta, atau akun media sosial resmi yang telah diverifikasi.
+
+## Ruang belajar
+
+- Halaman topik tersedia di `/edukasi`; setiap materi terbuka di rute khusus `/edukasi/:topicId` dan dapat dibagikan atau dimuat ulang secara langsung.
+- ID topik saat ini: `chemistry`, `processing`, dan `sustainable`.
 
 ## Peta ekosistem Malang
 

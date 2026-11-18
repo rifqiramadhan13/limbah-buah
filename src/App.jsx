@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import ContactSection from './ContactSection.jsx'
 import EcosystemMapPage from './EcosystemMapPage.jsx'
+import EducationPage from './EducationPage.jsx'
 import EducationTopics from './EducationTopics.jsx'
 import RegistrationPage from './RegistrationPage.jsx'
+import RegistrationStatusPage from './RegistrationStatusPage.jsx'
+import WasteEstimateCalculator from './WasteEstimateCalculator.jsx'
 import './App.css'
 
 const iconPaths = {
@@ -191,20 +194,17 @@ function App() {
   const [pathname, setPathname] = useState(window.location.pathname)
 
   const closeMenu = () => setMenuOpen(false)
-  const openRegistration = (event) => {
+  const navigate = (event, path) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()
-    window.history.pushState({}, '', '/daftar-limbah')
-    setPathname('/daftar-limbah')
+    window.history.pushState({}, '', path)
+    setPathname(window.location.pathname)
+    closeMenu()
     window.scrollTo(0, 0)
   }
-  const returnHome = (event) => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    event.preventDefault()
-    window.history.pushState({}, '', '/')
-    setPathname('/')
-    window.scrollTo(0, 0)
-  }
+  const openRegistration = (event, role) =>
+    navigate(event, role ? `/daftar-limbah?role=${encodeURIComponent(role)}` : '/daftar-limbah')
+  const returnHome = (event) => navigate(event, '/')
 
   useEffect(() => {
     const syncPathname = () => {
@@ -219,8 +219,21 @@ function App() {
   if (pathname === '/daftar-limbah') {
     return <RegistrationPage onHomeClick={returnHome} />
   }
+  if (pathname === '/lacak-pendaftaran') {
+    return <RegistrationStatusPage onHomeClick={returnHome} />
+  }
   if (pathname === '/peta-ekosistem') {
     return <EcosystemMapPage onHomeClick={returnHome} />
+  }
+  if (pathname === '/edukasi' || pathname.startsWith('/edukasi/')) {
+    return (
+      <EducationPage
+        Icon={Icon}
+        onHomeClick={returnHome}
+        onNavigate={navigate}
+        pathname={pathname}
+      />
+    )
   }
 
   return (
@@ -250,9 +263,11 @@ function App() {
               ))}
             </div>
             <div className="nav-actions">
-              <a className="login-link" href="#akses-akun" onClick={closeMenu}>Masuk</a>
               <a className="button button-dark button-small" href="#bergabung" onClick={closeMenu}>
                 Bergabung <Icon name="arrow" size={16} />
+              </a>
+              <a className="nav-register-link" href="/daftar-limbah" onClick={(event) => { closeMenu(); openRegistration(event) }}>
+                Daftar Sekarang
               </a>
             </div>
           </div>
@@ -439,7 +454,9 @@ function App() {
                   <span className="role-label">01 / PENGHASIL LIMBAH</span>
                   <h3>Mulai dari<br />yang tersisa.</h3>
                   <p>Untuk individu dan pelaku usaha yang ingin mencatat serta menyalurkan limbah kulit buah.</p>
-                  <a className="role-link" href="#akses-akun">Daftar sebagai penghasil <Icon name="arrow" size={18} /></a>
+                  <a className="role-link" href="/daftar-limbah?role=supplier" onClick={(event) => openRegistration(event, 'supplier')}>
+                    Daftar sebagai penghasil <Icon name="arrow" size={18} />
+                  </a>
                 </div>
               </article>
               <article className="role-card partner-card">
@@ -453,7 +470,9 @@ function App() {
                   <span className="role-label">02 / MITRA PENGOLAH</span>
                   <h3>Temukan bahan<br />untuk diolah.</h3>
                   <p>Untuk komunitas, kelompok pertanian, dan pengelola limbah organik.</p>
-                  <a className="role-link" href="#akses-akun">Daftar sebagai mitra <Icon name="arrow" size={18} /></a>
+                  <a className="role-link" href="/daftar-limbah?role=processor" onClick={(event) => openRegistration(event, 'processor')}>
+                    Daftar sebagai mitra <Icon name="arrow" size={18} />
+                  </a>
                 </div>
               </article>
             </div>
@@ -467,9 +486,14 @@ function App() {
               <p className="eyebrow"><span className="eyebrow-line" /> RUANG BELAJAR</p>
               <h2>Mengenal potensi kimia di balik <em>kulit buah.</em></h2>
               <p className="body-copy">Setiap jenis kulit buah memiliki karakteristik bahan organik yang berbeda. Memahaminya dapat menjadi salah satu pertimbangan dalam menentukan cara pemanfaatan.</p>
-              <a className="button button-outline" href="#topik-edukasi">Jelajahi informasi <Icon name="arrow" size={17} /></a>
+              <a className="button button-outline" href="/edukasi" onClick={(event) => navigate(event, '/edukasi')}>
+                Jelajahi informasi <Icon name="arrow" size={17} />
+              </a>
             </div>
-            <EducationTopics Icon={Icon} />
+            <EducationTopics
+              Icon={Icon}
+              onTopicClick={(event, topicId) => navigate(event, `/edukasi/${topicId}`)}
+            />
           </div>
         </section>
 
@@ -503,8 +527,9 @@ function App() {
             <h2>Saatnya menghubungkan limbah<br />dengan peluang <em>pemanfaatannya.</em></h2>
             <p>Mulai langkah sederhana untuk mendukung pengelolaan limbah kulit buah yang lebih terstruktur.</p>
             <div className="cta-actions">
-              <a className="button button-light" href="#bergabung">Bergabung bersama <Icon name="arrow" size={18} /></a>
-              <a className="cta-login" href="#akses-akun">Masuk ke SIRKULIT</a>
+              <a className="button button-light" href="/peta-ekosistem" onClick={(event) => navigate(event, '/peta-ekosistem')}>
+                Jelajahi Peta Mitra <Icon name="arrow" size={18} />
+              </a>
             </div>
             <span className="cta-sprig sprig-one"><Icon name="leaf" size={43} /></span>
             <span className="cta-sprig sprig-two"><Icon name="leaf" size={26} /></span>
@@ -517,10 +542,13 @@ function App() {
               <p className="eyebrow"><span className="eyebrow-line" /> UNTUK PENGHASIL LIMBAH</p>
               <h2>Punya Limbah Kulit Buah? <em>Daftarkan Sekarang!</em></h2>
               <p>Salurkan limbah kulit buah Anda melalui SIRKULIT. Daftarkan informasi limbah yang dihasilkan agar pengelola dapat meninjau dan menghubungkan Anda dengan mitra pengolah yang sesuai.</p>
+              <WasteEstimateCalculator />
             </div>
-            <a className="button button-dark" href="/daftar-limbah" onClick={openRegistration}>
-              Daftarkan Limbah <Icon name="arrow" size={18} />
-            </a>
+            <div className="registration-promo-actions">
+              <a className="button button-dark" href="/daftar-limbah" onClick={openRegistration}>
+                Daftarkan Limbah <Icon name="arrow" size={18} />
+              </a>
+            </div>
           </div>
         </section>
 
@@ -537,7 +565,7 @@ function App() {
             <p>Sistem informasi yang mempertemukan penghasil dan mitra pengolah limbah kulit buah.</p>
           </div>
           <div className="footer-column"><h3>Jelajahi</h3><a href="#tentang">Tentang SIRKULIT</a><a href="#cara-kerja">Cara kerja</a><a href="#fitur">Fitur</a><a href="#kontak">Kontak</a></div>
-          <div className="footer-column"><h3>Untuk Anda</h3><a href="#bergabung">Penghasil limbah</a><a href="#bergabung">Mitra pengolah</a><a href="#edukasi">Pusat informasi</a></div>
+          <div className="footer-column"><h3>Untuk Anda</h3><a href="#bergabung">Penghasil limbah</a><a href="#bergabung">Mitra pengolah</a><a href="#edukasi">Pusat informasi</a><a href="/lacak-pendaftaran">Lacak pendaftaran</a></div>
           <a className="back-top" href="#beranda">KEMBALI KE ATAS <span>↑</span></a>
         </div>
         <div className="page-shell footer-bottom"><span>© 2026 SIRKULIT</span><span>DARI LIMBAH MENJADI SUMBER DAYA BERNILAI</span><span>Informasi berbasis data yang tercatat</span></div>

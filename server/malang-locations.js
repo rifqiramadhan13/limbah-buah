@@ -11,6 +11,11 @@ export const MALANG_SEED_LOCATIONS = [
     district: 'Pakisaji',
     googleMapsUrl: 'https://maps.app.goo.gl/TPCg9e3MJ1yrBwwX7?g_st=iw',
     processingType: 'Budidaya maggot BSF',
+    latitude: -8.0314702,
+    longitude: 112.6243286,
+    locationStatus: 'google_verified',
+    verificationStatus: 'verified',
+    isLocationPublic: true,
   },
   {
     seedKey: 'grand-larva-maggot-bsf-malang',
@@ -22,6 +27,11 @@ export const MALANG_SEED_LOCATIONS = [
     district: 'Lowokwaru',
     googleMapsUrl: 'https://maps.app.goo.gl/stMoHwwNqiRXpKDd6?g_st=iw',
     processingType: 'Budidaya maggot BSF',
+    latitude: -7.9411057,
+    longitude: 112.5950214,
+    locationStatus: 'google_verified',
+    verificationStatus: 'verified',
+    isLocationPublic: true,
   },
   {
     seedKey: 'biokomposer-cacing-s-supriyadi',
@@ -33,6 +43,11 @@ export const MALANG_SEED_LOCATIONS = [
     district: 'Sukun',
     googleMapsUrl: 'https://maps.app.goo.gl/pjQrpbQuFqzViYCv9?g_st=iw',
     processingType: 'Pengolahan limbah organik menggunakan biokomposer cacing',
+    latitude: -7.995363,
+    longitude: 112.622372,
+    locationStatus: 'google_verified',
+    verificationStatus: 'verified',
+    isLocationPublic: true,
   },
   {
     seedKey: 'tpst-3r-mulyoagung-bersatu',
@@ -44,6 +59,11 @@ export const MALANG_SEED_LOCATIONS = [
     district: 'Dau',
     googleMapsUrl: 'https://maps.app.goo.gl/J4vVmvYaev3rj9VAA?g_st=iw',
     processingType: 'Pengelolaan dan pemilahan limbah melalui TPST 3R',
+    latitude: -7.9213785,
+    longitude: 112.5834081,
+    locationStatus: 'google_verified',
+    verificationStatus: 'verified',
+    isLocationPublic: true,
   },
   {
     seedKey: 'maggot-bsf-metia-larva',
@@ -55,6 +75,11 @@ export const MALANG_SEED_LOCATIONS = [
     district: 'Dau',
     googleMapsUrl: 'https://maps.app.goo.gl/8AxoAGXycXWVe6mz6',
     processingType: 'Budidaya maggot BSF',
+    latitude: -7.9247629,
+    longitude: 112.5867894,
+    locationStatus: 'google_verified',
+    verificationStatus: 'verified',
+    isLocationPublic: true,
   },
 ]
 
@@ -62,8 +87,16 @@ export function seedMalangLocations(database) {
   const insert = database.prepare(`
     INSERT OR IGNORE INTO ecosystem_seed_locations (
       seed_key, name, address, whatsapp, province, city, district,
-      google_maps_url, processing_type
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      google_maps_url, processing_type, latitude, longitude,
+      location_status, verification_status, is_location_public
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  const publishVerifiedLocation = database.prepare(`
+    UPDATE ecosystem_seed_locations SET
+      latitude = ?, longitude = ?, location_status = ?,
+      verification_status = ?, is_location_public = ?
+    WHERE seed_key = ? AND location_status = 'unverified'
+      AND verification_status = 'pending' AND is_location_public = 0
   `)
 
   for (const location of MALANG_SEED_LOCATIONS) {
@@ -77,12 +110,34 @@ export function seedMalangLocations(database) {
       location.district,
       location.googleMapsUrl,
       location.processingType,
+      location.latitude ?? null,
+      location.longitude ?? null,
+      location.locationStatus || 'unverified',
+      location.verificationStatus || 'pending',
+      location.isLocationPublic ? 1 : 0,
     )
+    if (location.latitude !== undefined && location.longitude !== undefined) {
+      publishVerifiedLocation.run(
+        location.latitude,
+        location.longitude,
+        location.locationStatus,
+        location.verificationStatus,
+        location.isLocationPublic ? 1 : 0,
+        location.seedKey,
+      )
+    }
   }
 }
 
 export async function verifyMalangSeedLocations(database, apiKey = process.env.GOOGLE_GEOCODING_API_KEY) {
-  if (!apiKey) return { verified: 0, pending: MALANG_SEED_LOCATIONS.length }
+  if (!apiKey) {
+    const pending = database.prepare(`
+      SELECT COUNT(*) AS count
+      FROM ecosystem_seed_locations
+      WHERE location_status = 'unverified'
+    `).get().count
+    return { verified: 0, pending }
+  }
 
   const pending = database.prepare(`
     SELECT seed_key AS seedKey, address

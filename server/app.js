@@ -14,6 +14,20 @@ import { ECOSYSTEM_ROLES, FRUIT_TYPES, ORGANIC_PRODUCTS } from '../shared/form-o
 const MAX_BODY_BYTES = 16 * 1024
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 const RATE_LIMIT_MAX_REQUESTS = 8
+const REGISTRATION_STATUS_DETAILS = {
+  pending_review: {
+    label: 'Menunggu Peninjauan',
+    message: 'Pengelola sedang meninjau pendaftaran Anda.',
+  },
+  verified: {
+    label: 'Disetujui',
+    message: 'Pendaftaran Anda telah disetujui. Profil publik hanya ditampilkan jika Anda menyetujui publikasi.',
+  },
+  rejected: {
+    label: 'Belum Disetujui',
+    message: 'Pendaftaran belum disetujui. Silakan hubungi pengelola melalui kanal resmi untuk informasi selanjutnya.',
+  },
+}
 const STATIC_CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -225,6 +239,63 @@ export function createApiServer({
 
     if (request.method === 'GET' && url.pathname === '/api/health') {
       sendJson(response, 200, { status: 'ok' })
+      return
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/registration-status') {
+      const clientAddress = request.socket.remoteAddress || 'unknown'
+      if (!allowRequest(`${clientAddress}:${url.pathname}`)) {
+        sendJson(response, 429, { error: 'Terlalu banyak percobaan. Silakan coba kembali nanti.' })
+        return
+      }
+
+      const body = await readJson(request)
+      if (body.error) {
+        sendJson(response, body.error.status, { error: body.error.message })
+        return
+      }
+
+      const registrationCode = typeof body.value?.registrationCode === 'string'
+        ? body.value.registrationCode.trim().toUpperCase()
+        : ''
+      const whatsapp = typeof body.value?.whatsapp === 'string'
+        ? body.value.whatsapp.trim()
+        : ''
+      const phoneDigits = whatsapp.replace(/\D/g, '')
+      if (
+        !/^SKR?-\d{4}-[A-F0-9]{8}$/.test(registrationCode)
+        || !/^[+\d\s().-]+$/.test(whatsapp)
+        || phoneDigits.length < 8
+        || phoneDigits.length > 15
+      ) {
+        sendJson(response, 400, { error: 'Masukkan kode registrasi dan nomor WhatsApp yang valid.' })
+        return
+      }
+
+      const registration = database.prepare(`
+        SELECT registration_code AS registrationCode, whatsapp, status,
+          created_at AS createdAt
+        FROM waste_registrations
+        WHERE registration_code = ?
+        UNION ALL
+        SELECT registration_code AS registrationCode, whatsapp, status,
+          created_at AS createdAt
+        FROM ecosystem_registrations
+        WHERE registration_code = ?
+      `).get(registrationCode, registrationCode)
+      if (!registration || registration.whatsapp.replace(/\D/g, '') !== phoneDigits) {
+        sendJson(response, 404, { error: 'Kode registrasi atau nomor WhatsApp tidak cocok.' })
+        return
+      }
+
+      const statusDetails = REGISTRATION_STATUS_DETAILS[registration.status]
+      sendJson(response, 200, {
+        registrationCode: registration.registrationCode,
+        status: registration.status,
+        statusLabel: statusDetails.label,
+        statusMessage: statusDetails.message,
+        createdAt: registration.createdAt,
+      })
       return
     }
 
