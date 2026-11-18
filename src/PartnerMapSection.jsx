@@ -4,6 +4,8 @@ import 'leaflet/dist/leaflet.css'
 import { FRUIT_TYPES } from '../shared/form-options.js'
 import { getJson } from './api.js'
 
+const MALANG_CENTER = [-7.9666, 112.6326]
+
 function googleMapsLink(partner) {
   if (partner.googleMapsUrl) return partner.googleMapsUrl
   const query = `${partner.latitude},${partner.longitude}`
@@ -61,7 +63,7 @@ function PartnerMap({ partners, selectedPartnerId, onSelectPartner }) {
     const map = L.map(containerRef.current, {
       scrollWheelZoom: false,
       zoomControl: true,
-    }).setView([-7.9666, 112.6326], 13)
+    }).setView(MALANG_CENTER, 13)
     const markers = L.layerGroup().addTo(map)
     const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -120,7 +122,7 @@ function PartnerMap({ partners, selectedPartnerId, onSelectPartner }) {
 
     const marker = markerRefs.current.get(selectedPartnerId)
     if (!selectedPartnerId) {
-      map.flyTo([-7.9666, 112.6326], 13, { duration: 0.6 })
+      map.flyTo(MALANG_CENTER, 13, { duration: 0.6 })
       return
     }
     if (!marker) return

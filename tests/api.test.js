@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, rmdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
@@ -87,6 +87,7 @@ test('stores a valid waste registration and returns its review status', async ()
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(validRegistration),
   })
+
   const body = await response.json()
 
   assert.equal(response.status, 201)
@@ -111,6 +112,36 @@ test('stores a valid waste registration and returns its review status', async ()
   assert.equal(adminResponse.status, 200)
   assert.equal(adminBody.items.length, 1)
   assert.equal(adminBody.items[0].fullName, validRegistration.fullName)
+})
+
+test('serves the built app and SPA routes when a static directory is configured', async () => {
+  const staticDirectory = mkdtempSync(path.join(os.tmpdir(), 'sirkulit-static-'))
+  const database = createDatabase(':memory:')
+  writeFileSync(path.join(staticDirectory, 'index.html'), '<main>SIRKULIT</main>')
+  writeFileSync(path.join(staticDirectory, 'app.js'), 'console.log("app")')
+  const staticServer = createApiServer({ database, staticDirectory })
+
+  try {
+    await new Promise((resolve) => staticServer.listen(0, '127.0.0.1', resolve))
+    const url = `http://127.0.0.1:${staticServer.address().port}`
+
+    const pageResponse = await fetch(`${url}/peta-ekosistem`)
+    assert.equal(pageResponse.status, 200)
+    assert.match(await pageResponse.text(), /SIRKULIT/)
+
+    const assetResponse = await fetch(`${url}/app.js`)
+    assert.equal(assetResponse.headers.get('content-type'), 'text/javascript; charset=utf-8')
+    assert.equal(await assetResponse.text(), 'console.log("app")')
+
+    const missingAssetResponse = await fetch(`${url}/missing.js`)
+    assert.equal(missingAssetResponse.status, 404)
+  } finally {
+    await new Promise((resolve, reject) => {
+      staticServer.close((error) => (error ? reject(error) : resolve()))
+    })
+    database.close()
+    rmSync(staticDirectory, { recursive: true, force: true })
+  }
 })
 
 test('rejects invalid registration without persisting it', async () => {
