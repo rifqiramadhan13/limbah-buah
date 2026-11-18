@@ -65,17 +65,16 @@ Kontak resmi belum disediakan. Isi objek `contactInfo` di `src/ContactSection.js
 - `GET /api/ecosystem/map` menyediakan marker yang telah diverifikasi dan disetujui untuk publikasi, ringkasan statistik dari database, serta opsi filter.
 - `POST /api/ecosystem/geocode` menggunakan Google Geocoding API dan cache alamat. Hanya hasil presisi `ROOFTOP` yang ditandai terverifikasi Google; hasil yang kurang presisi tidak menjadi marker.
 - Formulir meminta persetujuan publikasi peta secara terpisah. Pendaftar dapat memilih titik secara manual; semua profil tetap menunggu tinjauan pengelola sebelum ditampilkan.
-- Lima mitra awal tersimpan idempotent pada tabel `ecosystem_seed_locations`. Koordinatnya sengaja kosong dan lokasi tidak tampil sampai koordinat diverifikasi; admin dapat mengelolanya melalui `GET /api/admin/ecosystem-seeds` dan `PATCH /api/admin/ecosystem-seeds/:id`.
+- Lima mitra awal memiliki koordinat dan status publikasi pada data referensi proyek. Backend lokal menyimpannya secara idempotent pada tabel `ecosystem_seed_locations`.
 - Peta memakai Leaflet/OpenStreetMap yang sudah digunakan project. Geocoding memakai Google server-side; tanpa key, alamat dapat diverifikasi dengan memilih titik secara manual.
 
 Untuk mengaktifkan Google Geocoding, isi `.env` lokal dengan:
 
 ```env
 GOOGLE_GEOCODING_API_KEY=server-side-key
-VITE_GOOGLE_MAPS_API_KEY=browser-key
 ```
 
-Batasi key server ke Google Geocoding API dan penggunaan server sesuai aturan Google Cloud. Batasi key browser dengan HTTP referrer untuk domain website dan hanya izinkan Google Maps JavaScript API. Key `VITE_` tersedia pada bundle browser; jangan gunakan key server atau `ADMIN_API_KEY` di sana. Tanpa key browser, peta beralih ke Leaflet/OpenStreetMap yang sudah digunakan project.
+Batasi key server ke Google Geocoding API dan penggunaan server sesuai aturan Google Cloud. Peta di browser menggunakan Leaflet/OpenStreetMap tanpa kunci API. Tautan Google Maps tetap tersedia untuk petunjuk arah. Jangan masukkan key server atau `ADMIN_API_KEY` ke bundle browser.
 
 ## Peta mitra lama
 
@@ -102,3 +101,11 @@ Batasi key server ke Google Geocoding API dan penggunaan server sesuai aturan Go
 
 - Peta memakai Leaflet dan ubin OpenStreetMap. Untuk tampil sebagai marker, mitra harus memiliki latitude/longitude yang valid selain status terverifikasi dan persetujuan publikasi. Tautan Google Maps dapat disimpan sebagai alternatif untuk membuka petunjuk arah.
 - Repository ini belum memiliki dashboard admin atau autentikasi akun. Karena itu pengelolaan mitra tersedia sebagai API terlindungi yang dapat dipanggil dari dashboard admin setelah autentikasi berbasis role tersedia; jangan menaruh `ADMIN_API_KEY` pada bundle frontend.
+
+## Peta pada Netlify
+
+Netlify Server di `netlify/server/index.mjs` melayani `GET /api/ecosystem/map` dan `GET /api/partners` pada domain situs yang sama. Endpoint ini membaca lima lokasi referensi publik yang telah tersedia di proyek, lengkap dengan koordinat, kontak, tautan petunjuk arah, dan opsi filter. Data jenis kulit buah yang diterima tidak diasumsikan jika belum dicantumkan.
+
+Layanan peta ini hanya menerbitkan data referensi; layanan ini tidak menyimpan pendaftaran baru atau membaca database SQLite backend lokal/Render. Direktori pendaftaran tidak dimuat pada sumber data referensi. Statistik pada Netlify menghitung lokasi referensi publik. Penyimpanan pendaftaran dan integrasi direktori dinamis memerlukan pekerjaan backend terpisah.
+
+Konfigurasi `netlify.toml` memakai Node.js 24 untuk Netlify Server serta rewrite khusus rute halaman React. Permintaan API tidak diarahkan ke `index.html`. Peta dasar OpenStreetMap tidak memerlukan Google API key.

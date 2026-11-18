@@ -9,7 +9,6 @@ import {
 import { getJson } from './api.js'
 
 const MALANG_CENTER = { lat: -7.9666, lng: 112.6326 }
-const ROLE_COLORS = { supplier: '#2f7b50', processor: '#2f7b50', buyer: '#e18a28' }
 const DEMO_PARTNERS = [
   {
     id: 'demo-klojen',
@@ -65,36 +64,6 @@ const DEMO_PARTNERS = [
   frequency: '',
   notes: '',
 }))
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
-let googleMapsLoader
-
-function loadGoogleMaps() {
-  if (!GOOGLE_MAPS_API_KEY) return Promise.resolve(null)
-  if (window.google?.maps) return Promise.resolve(window.google.maps)
-  if (googleMapsLoader) return googleMapsLoader
-
-  googleMapsLoader = new Promise((resolve, reject) => {
-    const callbackName = '__sirkulitGoogleMapsReady'
-    window[callbackName] = () => {
-      delete window[callbackName]
-      resolve(window.google?.maps || null)
-    }
-
-    const script = document.createElement('script')
-    script.async = true
-    script.defer = true
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&callback=${callbackName}&v=weekly`
-    script.onerror = () => {
-      delete window[callbackName]
-      googleMapsLoader = null
-      reject(new Error('Google Maps gagal dimuat.'))
-    }
-    document.head.append(script)
-  })
-
-  return googleMapsLoader
-}
-
 function popupContent(profile) {
   const content = document.createElement('div')
   content.className = 'partner-map-popup'
@@ -158,71 +127,38 @@ function EcosystemMap({ items, focusId, onSelect }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const markerLayerRef = useRef(null)
-  const infoWindowRef = useRef(null)
   const [mapReady, setMapReady] = useState(false)
   const [tileError, setTileError] = useState(false)
-  const [mapNotice, setMapNotice] = useState('')
 
   useEffect(() => {
     if (!containerRef.current) return undefined
 
-    let active = true
-    const initializeMap = async () => {
-      let googleMaps = null
-      try {
-        googleMaps = await loadGoogleMaps()
-      } catch {
-        setMapNotice('Google Maps tidak tersedia saat ini; peta OpenStreetMap digunakan sebagai alternatif.')
-      }
-      if (!active) return
-
-      if (googleMaps) {
-        const map = new googleMaps.Map(containerRef.current, {
-          center: MALANG_CENTER,
-          zoom: 13,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: true,
-        })
-        mapRef.current = { provider: 'google', map }
-        infoWindowRef.current = new googleMaps.InfoWindow()
-        setMapReady(true)
-        return
-      }
-
-      if (!GOOGLE_MAPS_API_KEY) {
-        setMapNotice('Google Maps belum dikonfigurasi; peta OpenStreetMap digunakan sebagai alternatif.')
-      }
-      const map = L.map(containerRef.current, {
-        scrollWheelZoom: false,
-        zoomControl: true,
-      }).setView([MALANG_CENTER.lat, MALANG_CENTER.lng], 13)
-      const markerLayer = L.layerGroup().addTo(map)
-      const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      }).addTo(map)
-      tiles.on('tileerror', () => setTileError(true))
-      tiles.on('tileload', () => {
-        setTileError(false)
-        setMapNotice('')
-      })
-      mapRef.current = { provider: 'leaflet', map }
-      markerLayerRef.current = markerLayer
-      setMapReady(true)
-      window.requestAnimationFrame(() => map.invalidateSize())
-    }
-    initializeMap()
+    const map = L.map(containerRef.current, {
+      scrollWheelZoom: false,
+      zoomControl: true,
+    }).setView([MALANG_CENTER.lat, MALANG_CENTER.lng], 13)
+    const markerLayer = L.layerGroup().addTo(map)
+    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map)
+    tiles.on('tileerror', () => setTileError(true))
+    tiles.on('tileload', () => {
+      setTileError(false)
+    })
+    mapRef.current = { provider: 'leaflet', map }
+    markerLayerRef.current = markerLayer
+    setMapReady(true)
+    const resizeFrame = window.requestAnimationFrame(() => map.invalidateSize())
+    const observer = new ResizeObserver(() => map.invalidateSize())
+    observer.observe(containerRef.current)
 
     return () => {
-      active = false
-      if (mapRef.current?.provider === 'leaflet') mapRef.current.map.remove()
-      if (mapRef.current?.provider === 'google') {
-        markerLayerRef.current?.forEach((marker) => marker.setMap(null))
-      }
+      window.cancelAnimationFrame(resizeFrame)
+      observer.disconnect()
+      map.remove()
       mapRef.current = null
       markerLayerRef.current = null
-      infoWindowRef.current = null
     }
   }, [])
 
@@ -232,49 +168,6 @@ function EcosystemMap({ items, focusId, onSelect }) {
     if (!mapInstance || !mapReady) return
 
     const selected = items.find((item) => item.id === focusId)
-    if (mapInstance.provider === 'google') {
-      markerLayerRef.current?.forEach((marker) => marker.setMap(null))
-      const googleMaps = window.google.maps
-      const markers = items.map((profile) => {
-        const marker = new googleMaps.Marker({
-          position: { lat: profile.latitude, lng: profile.longitude },
-          title: profile.name,
-          icon: {
-            path: googleMaps.SymbolPath.CIRCLE,
-            scale: 9,
-            fillColor: ROLE_COLORS[profile.role] || ROLE_COLORS.processor,
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 2,
-          },
-          map: mapInstance.map,
-        })
-        marker.addListener('click', () => {
-          onSelect(profile.id)
-          infoWindowRef.current.setContent(popupContent(profile))
-          infoWindowRef.current.open({ map: mapInstance.map, anchor: marker })
-        })
-        return marker
-      })
-      markerLayerRef.current = markers
-      if (selected) {
-        mapInstance.map.setCenter({ lat: selected.latitude, lng: selected.longitude })
-        mapInstance.map.setZoom(15)
-        googleMaps.event.trigger(markers[items.indexOf(selected)], 'click')
-      } else if (markers.length > 1) {
-        const bounds = new googleMaps.LatLngBounds()
-        markers.forEach((marker) => bounds.extend(marker.getPosition()))
-        mapInstance.map.fitBounds(bounds)
-      } else if (markers.length === 1) {
-        mapInstance.map.setCenter(markers[0].getPosition())
-        mapInstance.map.setZoom(13)
-      } else {
-        mapInstance.map.setCenter(MALANG_CENTER)
-        mapInstance.map.setZoom(13)
-      }
-      return
-    }
-
     const map = mapInstance.map
     markerLayer.clearLayers()
     const markers = items.map((profile) => L.marker(
@@ -284,7 +177,7 @@ function EcosystemMap({ items, focusId, onSelect }) {
         title: profile.name,
         keyboard: true,
         icon: L.divIcon({
-            className: `ecosystem-map-marker ecosystem-map-marker-${profile.role}`,
+          className: `ecosystem-map-marker ecosystem-map-marker-${profile.role}`,
           html: '<span></span>',
           iconSize: [30, 38],
           iconAnchor: [15, 36],
@@ -322,7 +215,6 @@ function EcosystemMap({ items, focusId, onSelect }) {
           Peta dasar belum dapat dimuat. Periksa koneksi internet.
         </p>
       )}
-      {mapNotice && <p className="partner-map-tile-error" role="status">{mapNotice}</p>}
       {!items.length && (
         <div className="partner-map-empty" role="status">
           <strong>Tidak ada lokasi mitra yang cocok.</strong>
@@ -418,6 +310,7 @@ function PartnerCard({ profile, selected, onSelect }) {
 export default function EcosystemMapPanel() {
   const [items, setItems] = useState(DEMO_PARTNERS)
   const [dataSource, setDataSource] = useState('demo')
+  const [apiSource, setApiSource] = useState('')
   const [selectedItemId, setSelectedItemId] = useState('')
   const [directory, setDirectory] = useState([])
   const [stats, setStats] = useState(null)
@@ -444,11 +337,13 @@ export default function EcosystemMapPanel() {
     const controller = new AbortController()
     getJson('/api/ecosystem/map', { signal: controller.signal })
       .then((result) => {
+        setApiSource(result.source || 'database')
+        if (result.source === 'published-reference-locations') {
+          setDirectoryState({ status: 'ready', error: '' })
+        }
         const apiItems = Array.isArray(result.items) ? result.items : []
-        const apiPartners = apiItems.filter((item) => item.role === 'processor')
-        const useDemoPartners = apiPartners.length === 0
-        setItems(useDemoPartners ? [...apiItems, ...DEMO_PARTNERS] : apiItems)
-        setDataSource(useDemoPartners ? 'demo' : 'api')
+        setItems(apiItems)
+        setDataSource('api')
         setSelectedItemId('')
         setStats(result.stats || null)
         const options = result.filters || {}
@@ -461,6 +356,8 @@ export default function EcosystemMapPanel() {
       })
       .catch((error) => {
         if (error?.name === 'AbortError') return
+        setApiSource('unavailable')
+        setDirectoryState({ status: 'ready', error: '' })
         setItems(DEMO_PARTNERS)
         setDataSource('demo')
         setSelectedItemId('')
@@ -473,6 +370,7 @@ export default function EcosystemMapPanel() {
   }, [])
 
   useEffect(() => {
+    if (apiSource !== 'database') return undefined
     const controller = new AbortController()
     getJson('/api/ecosystem/directory', { signal: controller.signal })
       .then((result) => {
@@ -487,7 +385,7 @@ export default function EcosystemMapPanel() {
         })
       })
     return () => controller.abort()
-  }, [])
+  }, [apiSource])
 
   const updateFilter = (event) => {
     const { name, value } = event.target
@@ -539,7 +437,7 @@ export default function EcosystemMapPanel() {
         </div>
 
         {dataSource === 'api' && (
-          <div className="ecosystem-map-stats" aria-label="Statistik lokasi dari database">
+          <div className="ecosystem-map-stats" aria-label="Statistik lokasi peta">
             {[
               ['Pemasok limbah', stats?.suppliers],
               ['Mitra pengolah', stats?.processors],
