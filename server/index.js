@@ -1,10 +1,13 @@
 import { resolve } from 'node:path'
 import { createDatabase } from './database.js'
+import { createPostgresDatabase } from './postgres-database.js'
 import { createApiServer } from './app.js'
 import { seedMalangLocations, verifyMalangSeedLocations } from './malang-locations.js'
 
-const database = createDatabase(process.env.DATABASE_PATH || undefined)
-seedMalangLocations(database)
+const database = process.env.DATABASE_URL
+  ? await createPostgresDatabase()
+  : createDatabase(process.env.DATABASE_PATH || undefined)
+await seedMalangLocations(database)
 const staticDirectory = process.env.STATIC_DIRECTORY
   || (process.env.NODE_ENV === 'production' ? resolve('dist') : '')
 const server = createApiServer({ database, staticDirectory })
@@ -30,8 +33,7 @@ if (process.env.GOOGLE_GEOCODING_API_KEY) {
 
 function closeServer() {
   server.close(() => {
-    database.close()
-    process.exit(0)
+    Promise.resolve(database.close()).finally(() => process.exit(0))
   })
 }
 

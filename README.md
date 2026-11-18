@@ -1,6 +1,6 @@
 # SIRKULIT
 
-SIRKULIT adalah aplikasi React/Vite untuk menghubungkan pemasok limbah organik, mitra pengolah, dan pengguna hasil olahan. Beranda existing tetap dipertahankan; pendaftaran, direktori, peta ekosistem Malang, dan formulir kontak terhubung ke API Node.js dan SQLite.
+SIRKULIT adalah aplikasi React/Vite untuk menghubungkan pemasok limbah organik, mitra pengolah, dan pengguna hasil olahan. Beranda existing tetap dipertahankan; pendaftaran, direktori, peta ekosistem Malang, dan formulir kontak terhubung ke API Node.js. Pengembangan lokal memakai SQLite; deployment Netlify dapat memakai Supabase Postgres.
 
 Bagian pendaftaran menyediakan kalkulator simulasi volume limbah mingguan, bulanan, dan tahunan berdasarkan rata-rata jumlah harian serta hari operasional. Hasilnya merupakan perkiraan, bukan data aktual atau jaminan penjemputan.
 
@@ -22,7 +22,7 @@ Persyaratan: Node.js 22.13 atau lebih baru.
    npm run dev
    ```
 
-   Frontend Vite meneruskan permintaan `/api` ke API lokal pada port 3001. File SQLite dan data pribadi disimpan di `data/sirkulit.sqlite`; direktori tersebut tidak dilacak Git.
+   Frontend Vite meneruskan permintaan `/api` ke API lokal pada port 3001. Tanpa `DATABASE_URL`, API memakai SQLite dan menyimpan data lokal di `data/sirkulit.sqlite`; direktori tersebut tidak dilacak Git. Untuk pengujian dengan Postgres, atur `DATABASE_URL` hanya di environment server.
 
 4. Jalankan pemeriksaan:
 
@@ -32,9 +32,22 @@ Persyaratan: Node.js 22.13 atau lebih baru.
    npm run build
    ```
 
-## Deploy publik ke Render
+## Deploy Netlify + Supabase Postgres
 
-Repository ini menyediakan Blueprint Render di `render.yaml`. Di Render, buat **New > Blueprint Instance**, hubungkan repository ini, lalu pilih Blueprint tersebut. Blueprint membangun frontend dan menjalankan API pada satu layanan, menggunakan disk persisten 1 GB untuk SQLite, serta membuat `ADMIN_API_KEY` secara otomatis. Layanan memakai paket berbayar karena database memerlukan disk persisten; tinjau harga Render sebelum konfirmasi.
+Repository menyediakan `netlify.toml` untuk membangun frontend Vite, meneruskan `/api/*` ke Netlify Function, dan mengarahkan rute SPA ke `index.html`. Function menggunakan Postgres; tidak ada fallback ke SQLite pada runtime Netlify. Migrasi skema berversi dijalankan secara idempoten saat function pertama kali menginisialisasi database.
+
+Konfigurasi yang perlu dilakukan sendiri sebelum deploy:
+
+1. Pada konfigurasi environment Netlify, isi `DATABASE_URL` menggunakan connection string Postgres Supabase yang sesuai untuk serverless (disarankan pooler transaksi). Aktifkan koneksi TLS sesuai connection string Supabase. Nilai ini dipakai server saja—jangan awali dengan `VITE_`, jangan masukkan ke kode, dan jangan kirimkan ke chat.
+2. Atur `ADMIN_API_KEY` sebagai secret server-side acak yang kuat (minimal 32 byte). Admin API tetap nonaktif jika secret tidak disediakan.
+3. Opsional: atur `GOOGLE_GEOCODING_API_KEY` server-side untuk geocoding. Tidak diperlukan untuk build atau penggunaan peta berbasis OSM.
+4. Deploy repository ke Netlify setelah environment variable tersedia. Netlify site dan environment belum dibuat atau diubah oleh perubahan ini.
+
+Skema Postgres membuat tabel yang digunakan API saat ini dan menyimpan hasil migrasi pada `sirkulit_schema_migrations`. Tabel memiliki Row Level Security dan tidak memberikan akses kepada role API anon Supabase; akses aplikasi dilakukan melalui koneksi server. Migrasi ini **tidak menyalin rekaman yang sudah ada dari SQLite/Render**. Jika ada data produksi yang perlu dipertahankan, rencanakan ekspor/impor dan verifikasi terpisah sebelum memindahkan trafik; jangan menganggap database baru berisi data lama.
+
+## Deployment lama ke Render (SQLite)
+
+`render.yaml` tetap tersedia sebagai konfigurasi deployment lama yang memakai disk persisten untuk SQLite. Ini terpisah dari konfigurasi Netlify + Supabase di atas. Tinjau biaya layanan Render sebelum menggunakannya.
 
 Setelah deploy selesai, URL `onrender.com` dapat dibagikan. Formulir publik dapat menyimpan data pribadi ke database; pastikan pemberitahuan privasi dan persetujuan yang diperlukan tersedia sebelum membagikan URL. Jangan mengubah `ADMIN_API_KEY` menjadi variabel `VITE_` atau menaruhnya di browser.
 
@@ -50,7 +63,7 @@ Setelah deploy selesai, URL `onrender.com` dapat dibagikan. Formulir publik dapa
 - Endpoint admin menerima `Authorization: Bearer <ADMIN_API_KEY>`, mendukung `limit` (maksimal 100) dan paginasi `beforeId`. Data pribadi tidak disertakan dalam respons publik.
 - Jika `ADMIN_API_KEY` kosong, endpoint admin menolak akses dengan status 503. Jangan menaruh kunci admin di frontend atau repository.
 
-API menggunakan validasi server, batas ukuran request, rate limit per alamat, dan respons JSON tanpa cache. Untuk deployment, gunakan HTTPS, simpan secret pada konfigurasi server, arahkan `/api` melalui reverse proxy ke API, sediakan fallback SPA ke `index.html` untuk rute `/daftar-limbah`, `/peta-ekosistem`, dan `/edukasi`, dan pastikan disk database persisten serta hanya dapat diakses akun server. Integrasi ini menggunakan kunci API admin karena project belum memiliki autentikasi; hubungkan endpoint ke autentikasi dan otorisasi berbasis role saat dashboard admin tersedia.
+API menggunakan validasi server, batas ukuran request, rate limit per alamat, dan respons JSON tanpa cache. Netlify menangani routing API dan fallback SPA; deployment lain harus menyediakan HTTPS, menyimpan secret pada konfigurasi server, dan memastikan database hanya dapat diakses aplikasi. Integrasi ini menggunakan kunci API admin karena project belum memiliki autentikasi; hubungkan endpoint ke autentikasi dan otorisasi berbasis role saat dashboard admin tersedia.
 
 Kontak resmi belum disediakan. Isi objek `contactInfo` di `src/ContactSection.jsx` hanya dengan nomor WhatsApp, email, alamat, tautan peta, atau akun media sosial resmi yang telah diverifikasi.
 

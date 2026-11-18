@@ -510,8 +510,8 @@ test('tracks ecosystem registration status without exposing personal details', a
 })
 
 test('seeds and publishes all five verified Google Maps locations', async () => {
-  seedMalangLocations(database)
-  seedMalangLocations(database)
+  await seedMalangLocations(database)
+  await seedMalangLocations(database)
   const rows = database.prepare(`
     SELECT name, address, whatsapp, google_maps_url AS googleMapsUrl,
       latitude, longitude, location_status AS locationStatus,

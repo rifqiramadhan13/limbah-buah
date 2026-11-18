@@ -83,13 +83,14 @@ export const MALANG_SEED_LOCATIONS = [
   },
 ]
 
-export function seedMalangLocations(database) {
+export async function seedMalangLocations(database) {
   const insert = database.prepare(`
-    INSERT OR IGNORE INTO ecosystem_seed_locations (
+    INSERT INTO ecosystem_seed_locations (
       seed_key, name, address, whatsapp, province, city, district,
       google_maps_url, processing_type, latitude, longitude,
       location_status, verification_status, is_location_public
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (seed_key) DO NOTHING
   `)
   const publishVerifiedLocation = database.prepare(`
     UPDATE ecosystem_seed_locations SET
@@ -100,7 +101,7 @@ export function seedMalangLocations(database) {
   `)
 
   for (const location of MALANG_SEED_LOCATIONS) {
-    insert.run(
+    await insert.run(
       location.seedKey,
       location.name,
       location.address,
@@ -117,7 +118,7 @@ export function seedMalangLocations(database) {
       location.isLocationPublic ? 1 : 0,
     )
     if (location.latitude !== undefined && location.longitude !== undefined) {
-      publishVerifiedLocation.run(
+      await publishVerifiedLocation.run(
         location.latitude,
         location.longitude,
         location.locationStatus,
@@ -131,15 +132,15 @@ export function seedMalangLocations(database) {
 
 export async function verifyMalangSeedLocations(database, apiKey = process.env.GOOGLE_GEOCODING_API_KEY) {
   if (!apiKey) {
-    const pending = database.prepare(`
+    const pending = (await database.prepare(`
       SELECT COUNT(*) AS count
       FROM ecosystem_seed_locations
       WHERE location_status = 'unverified'
-    `).get().count
+    `).get()).count
     return { verified: 0, pending }
   }
 
-  const pending = database.prepare(`
+  const pending = await database.prepare(`
     SELECT seed_key AS seedKey, address
     FROM ecosystem_seed_locations
     WHERE location_status = 'unverified'
@@ -150,7 +151,7 @@ export async function verifyMalangSeedLocations(database, apiKey = process.env.G
     try {
       const result = await geocodeAddress(database, location.address, apiKey)
       if (result.status !== 'google_verified') continue
-      database.prepare(`
+      await database.prepare(`
         UPDATE ecosystem_seed_locations SET
           latitude = ?, longitude = ?, location_status = 'google_verified',
           verification_status = 'verified', is_location_public = 1
