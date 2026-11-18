@@ -1,0 +1,27 @@
+[build.environment]
+  NODE_VERSION = "24"
+
+[[redirects]]
+  from = "/peta-ekosistem"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/daftar-limbah"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/lacak-pendaftaran"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/edukasi"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/edukasi/*"
+  to = "/index.html"
+  status = 200
