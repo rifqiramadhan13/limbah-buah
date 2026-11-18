@@ -9,7 +9,62 @@ import {
 import { getJson } from './api.js'
 
 const MALANG_CENTER = { lat: -7.9666, lng: 112.6326 }
-const ROLE_COLORS = { supplier: '#2f7b50', processor: '#2878b8', buyer: '#e18a28' }
+const ROLE_COLORS = { supplier: '#2f7b50', processor: '#2f7b50', buyer: '#e18a28' }
+const DEMO_PARTNERS = [
+  {
+    id: 'demo-klojen',
+    role: 'processor',
+    name: 'Contoh Mitra Pengolah Klojen',
+    city: 'Kota Malang',
+    district: 'Klojen',
+    latitude: -7.9829,
+    longitude: 112.6308,
+    wasteTypes: ['Kulit jeruk', 'Kulit pisang'],
+  },
+  {
+    id: 'demo-lowokwaru',
+    role: 'processor',
+    name: 'Contoh Mitra Pengolah Lowokwaru',
+    city: 'Kota Malang',
+    district: 'Lowokwaru',
+    latitude: -7.9412,
+    longitude: 112.617,
+    wasteTypes: ['Kulit nanas', 'Kulit mangga'],
+  },
+  {
+    id: 'demo-blimbing',
+    role: 'processor',
+    name: 'Contoh Mitra Pengolah Blimbing',
+    city: 'Kota Malang',
+    district: 'Blimbing',
+    latitude: -7.9343,
+    longitude: 112.6504,
+    wasteTypes: ['Kulit pisang', 'Campuran kulit buah'],
+  },
+  {
+    id: 'demo-sukun',
+    role: 'processor',
+    name: 'Contoh Mitra Pengolah Sukun',
+    city: 'Kota Malang',
+    district: 'Sukun',
+    latitude: -8.0005,
+    longitude: 112.6205,
+    wasteTypes: ['Kulit jeruk', 'Kulit nanas', 'Kulit mangga'],
+  },
+].map((profile) => ({
+  ...profile,
+  source: 'demo',
+  province: 'Jawa Timur',
+  address: '',
+  whatsapp: '',
+  productTypes: [],
+  productType: '',
+  quantityKg: null,
+  capacityKg: null,
+  processingType: 'Contoh pengolahan limbah kulit buah',
+  frequency: '',
+  notes: '',
+}))
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
 let googleMapsLoader
 
@@ -99,7 +154,7 @@ function popupContent(profile) {
   return content
 }
 
-function EcosystemMap({ items, focusId }) {
+function EcosystemMap({ items, focusId, onSelect }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const markerLayerRef = useRef(null)
@@ -124,7 +179,7 @@ function EcosystemMap({ items, focusId }) {
       if (googleMaps) {
         const map = new googleMaps.Map(containerRef.current, {
           center: MALANG_CENTER,
-          zoom: 10,
+          zoom: 13,
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: true,
@@ -141,7 +196,7 @@ function EcosystemMap({ items, focusId }) {
       const map = L.map(containerRef.current, {
         scrollWheelZoom: false,
         zoomControl: true,
-      }).setView([MALANG_CENTER.lat, MALANG_CENTER.lng], 10)
+      }).setView([MALANG_CENTER.lat, MALANG_CENTER.lng], 13)
       const markerLayer = L.layerGroup().addTo(map)
       const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -195,6 +250,7 @@ function EcosystemMap({ items, focusId }) {
           map: mapInstance.map,
         })
         marker.addListener('click', () => {
+          onSelect(profile.id)
           infoWindowRef.current.setContent(popupContent(profile))
           infoWindowRef.current.open({ map: mapInstance.map, anchor: marker })
         })
@@ -214,7 +270,7 @@ function EcosystemMap({ items, focusId }) {
         mapInstance.map.setZoom(13)
       } else {
         mapInstance.map.setCenter(MALANG_CENTER)
-        mapInstance.map.setZoom(10)
+        mapInstance.map.setZoom(13)
       }
       return
     }
@@ -235,20 +291,23 @@ function EcosystemMap({ items, focusId }) {
           popupAnchor: [0, -32],
         }),
       },
-    ).bindPopup(L.popup({ maxWidth: 340 }).setContent(popupContent(profile))).addTo(markerLayer))
+    )
+      .bindPopup(L.popup({ maxWidth: 340 }).setContent(popupContent(profile)))
+      .on('click', () => onSelect(profile.id))
+      .addTo(markerLayer))
 
     if (selected) {
       const marker = markers[items.indexOf(selected)]
       map.setView(marker.getLatLng(), 15)
       marker.openPopup()
     } else if (markers.length > 1) {
-      map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15), { maxZoom: 12 })
+      map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15), { maxZoom: 13 })
     } else if (markers.length === 1) {
       map.setView(markers[0].getLatLng(), 13)
     } else {
-      map.setView(MALANG_CENTER, 10)
+      map.setView(MALANG_CENTER, 13)
     }
-  }, [items, focusId, mapReady])
+  }, [items, focusId, mapReady, onSelect])
 
   return (
     <div className="partner-map-wrap">
@@ -266,8 +325,8 @@ function EcosystemMap({ items, focusId }) {
       {mapNotice && <p className="partner-map-tile-error" role="status">{mapNotice}</p>}
       {!items.length && (
         <div className="partner-map-empty" role="status">
-          <strong>Belum ada lokasi terverifikasi untuk ditampilkan.</strong>
-          <span>Lokasi hanya muncul setelah koordinat diverifikasi, pemilik menyetujui publikasi, dan pengelola menyetujui profil.</span>
+          <strong>Tidak ada lokasi mitra yang cocok.</strong>
+          <span>Coba ubah pencarian atau filter jenis kulit buah.</span>
         </div>
       )}
     </div>
@@ -312,8 +371,54 @@ function DirectoryCard({ profile }) {
   )
 }
 
+function PartnerCard({ profile, selected, onSelect }) {
+  const acceptedTypes = profile.wasteTypes.length
+    ? profile.wasteTypes.join(', ')
+    : 'Belum dicantumkan'
+
+  return (
+    <article className={`ecosystem-partner-card${selected ? ' is-selected' : ''}`}>
+      <button
+        aria-pressed={selected}
+        className="ecosystem-partner-card-select"
+        onClick={() => onSelect(profile.id)}
+        type="button"
+      >
+        <span className="ecosystem-partner-card-name">{profile.name}</span>
+        <span className="ecosystem-partner-card-district">
+          {profile.district ? `Kecamatan ${profile.district}` : 'Kecamatan belum dicantumkan'}
+        </span>
+        <span className="ecosystem-partner-card-waste"><b>Menerima:</b> {acceptedTypes}</span>
+      </button>
+      {profile.whatsapp && (
+        <a
+          className="ecosystem-partner-card-contact"
+          href={`tel:${profile.whatsapp.replace(/[^\d+]/g, '')}`}
+        >
+          Telepon: {profile.whatsapp}
+        </a>
+      )}
+      {profile.googleMapsUrl && (
+        <a
+          className="ecosystem-partner-card-contact"
+          href={profile.googleMapsUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Buka Google Maps
+        </a>
+      )}
+      <a className="ecosystem-partner-card-action" href="/daftar-limbah">
+        Ajukan Setor
+      </a>
+    </article>
+  )
+}
+
 export default function EcosystemMapPanel() {
-  const [items, setItems] = useState([])
+  const [items, setItems] = useState(DEMO_PARTNERS)
+  const [dataSource, setDataSource] = useState('demo')
+  const [selectedItemId, setSelectedItemId] = useState('')
   const [directory, setDirectory] = useState([])
   const [stats, setStats] = useState(null)
   const [filters, setFilters] = useState({
@@ -339,7 +444,12 @@ export default function EcosystemMapPanel() {
     const controller = new AbortController()
     getJson('/api/ecosystem/map', { signal: controller.signal })
       .then((result) => {
-        setItems(Array.isArray(result.items) ? result.items : [])
+        const apiItems = Array.isArray(result.items) ? result.items : []
+        const apiPartners = apiItems.filter((item) => item.role === 'processor')
+        const useDemoPartners = apiPartners.length === 0
+        setItems(useDemoPartners ? [...apiItems, ...DEMO_PARTNERS] : apiItems)
+        setDataSource(useDemoPartners ? 'demo' : 'api')
+        setSelectedItemId('')
         setStats(result.stats || null)
         const options = result.filters || {}
         setFilterOptions((current) => ({
@@ -351,6 +461,9 @@ export default function EcosystemMapPanel() {
       })
       .catch((error) => {
         if (error?.name === 'AbortError') return
+        setItems(DEMO_PARTNERS)
+        setDataSource('demo')
+        setSelectedItemId('')
         setState({
           status: 'error',
           error: error instanceof Error ? error.message : 'Data peta tidak dapat dimuat.',
@@ -402,6 +515,7 @@ export default function EcosystemMapPanel() {
     return !query || [item.name, item.address, item.city, item.district]
       .filter(Boolean).join(' ').toLowerCase().includes(query)
   })
+  const visiblePartners = visibleItems.filter((item) => item.role === 'processor')
   const visibleDirectory = directory.filter((profile) => {
     if (filters.role && profile.role !== filters.role) return false
     if (filters.wasteType && !profile.wasteTypes.includes(filters.wasteType)) return false
@@ -421,91 +535,131 @@ export default function EcosystemMapPanel() {
             <p className="eyebrow"><span className="eyebrow-line" /> PETA DIGITAL</p>
             <h1 id="ecosystem-map-title">Peta Ekosistem Limbah Organik <em>Malang</em></h1>
           </div>
-          <p>Jelajahi lokasi pemasok, mitra pengolah, dan pengguna hasil olahan yang sudah diverifikasi di Malang.</p>
+          <p>Temukan mitra pengolah limbah kulit buah di wilayah Kota Malang.</p>
         </div>
 
-        <div className="ecosystem-map-stats" aria-label="Statistik lokasi dari database">
-          {[
-            ['Pemasok limbah', stats?.suppliers],
-            ['Mitra pengolah', stats?.processors],
-            ['Pengguna hasil olahan', stats?.buyers],
-            ['Total terdaftar', stats?.totalRegistered],
-            ['Lokasi terverifikasi', stats?.verifiedLocations],
-          ].map(([label, count]) => (
-            <div className="ecosystem-map-stat" key={label}>
-              <strong>{state.status === 'loading' ? '—' : count ?? 0}</strong>
-              <span>{label}</span>
+        {dataSource === 'api' && (
+          <div className="ecosystem-map-stats" aria-label="Statistik lokasi dari database">
+            {[
+              ['Pemasok limbah', stats?.suppliers],
+              ['Mitra pengolah', stats?.processors],
+              ['Pengguna hasil olahan', stats?.buyers],
+              ['Total terdaftar', stats?.totalRegistered],
+              ['Lokasi terverifikasi', stats?.verifiedLocations],
+            ].map(([label, count]) => (
+              <div className="ecosystem-map-stat" key={label}>
+                <strong>{state.status === 'loading' ? '—' : count ?? 0}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="ecosystem-map-split">
+          <aside className="ecosystem-partner-sidebar" aria-label="Daftar mitra pengolah">
+            <div className="ecosystem-partner-filters">
+              <label className="partner-map-filter">
+                <span>Cari mitra</span>
+                <input maxLength="120" name="q" onChange={updateFilter} placeholder="Nama atau kecamatan" type="search" value={filters.q} />
+              </label>
+              <label className="partner-map-filter">
+                <span>Jenis kulit buah</span>
+                <select name="wasteType" onChange={updateFilter} value={filters.wasteType}>
+                  <option value="">Semua jenis</option>
+                  {FRUIT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </label>
+              <details className="ecosystem-map-advanced-filters">
+                <summary>Filter lanjutan</summary>
+                <div className="ecosystem-map-advanced-fields">
+                  <label className="partner-map-filter">
+                    <span>Kategori mitra</span>
+                    <select name="role" onChange={updateFilter} value={filters.role}>
+                      <option value="">Semua kategori</option>
+                      {Object.entries(ECOSYSTEM_ROLES).map(([role, label]) => <option key={role} value={role}>{label}</option>)}
+                    </select>
+                  </label>
+                  <label className="partner-map-filter">
+                    <span>Jenis pengolahan</span>
+                    <select name="processingType" onChange={updateFilter} value={filters.processingType}>
+                      <option value="">Semua jenis pengolahan</option>
+                      {filterOptions.processingTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </label>
+                  <label className="partner-map-filter">
+                    <span>Produk hasil olahan</span>
+                    <select name="productType" onChange={updateFilter} value={filters.productType}>
+                      <option value="">Semua produk</option>
+                      {filterOptions.productTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </label>
+                  <label className="partner-map-filter">
+                    <span>Kecamatan</span>
+                    <select name="district" onChange={updateFilter} value={filters.district}>
+                      <option value="">Semua kecamatan</option>
+                      {[...new Set([...filterOptions.districts, ...DEMO_PARTNERS.map((item) => item.district)])]
+                        .map((district) => <option key={district} value={district}>{district}</option>)}
+                    </select>
+                  </label>
+                  <label className="partner-map-filter">
+                    <span>Kota/Kabupaten</span>
+                    <select name="city" onChange={updateFilter} value={filters.city}>
+                      <option value="">Semua kota/kabupaten</option>
+                      {[...new Set([...filterOptions.cities, 'Kota Malang'])]
+                        .map((city) => <option key={city} value={city}>{city}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </details>
+              <button className="button button-outline partner-map-clear" disabled={!hasFilters} onClick={clearFilters} type="button">
+                Hapus filter
+              </button>
             </div>
-          ))}
-        </div>
 
-        <div className="ecosystem-map-legend" aria-label="Legenda kategori peta">
-          {Object.entries(ECOSYSTEM_ROLES).map(([role, label]) => (
-            <span className="ecosystem-map-legend-item" key={role}>
-              <i className={`ecosystem-map-legend-dot ecosystem-map-legend-${role}`} />
-              {label}
-            </span>
-          ))}
-        </div>
+            <div className="ecosystem-partner-list">
+              <p aria-live="polite" className="partner-map-result-count">
+                {dataSource === 'demo'
+                  ? `${visiblePartners.length} contoh mitra ditampilkan`
+                  : state.status === 'loading' ? 'Memuat mitra...' : `${visiblePartners.length} mitra ditemukan`}
+              </p>
+              {dataSource === 'demo' && (
+                <p className="ecosystem-demo-notice" role="status">
+                  Contoh data simulasi di Kota Malang; bukan mitra terverifikasi.
+                </p>
+              )}
+              {state.status === 'error' && <p className="partner-map-error" role="alert">{state.error} Menampilkan contoh data simulasi.</p>}
+              {state.status === 'ready' && !visiblePartners.length && (
+                <p className="ecosystem-directory-empty" role="status">Tidak ada mitra yang cocok dengan pencarian atau filter.</p>
+              )}
+              {visiblePartners.map((profile) => (
+                <PartnerCard
+                  key={profile.id}
+                  onSelect={setSelectedItemId}
+                  profile={profile}
+                  selected={(selectedItemId || focusId) === profile.id}
+                />
+              ))}
+            </div>
+          </aside>
 
-        <div className="ecosystem-map-filters" aria-label="Filter peta ekosistem">
-          <label className="partner-map-filter">
-            <span>Nama, usaha, atau alamat</span>
-            <input maxLength="120" name="q" onChange={updateFilter} placeholder="Cari lokasi" type="search" value={filters.q} />
-          </label>
-          <label className="partner-map-filter">
-            <span>Kategori</span>
-            <select name="role" onChange={updateFilter} value={filters.role}>
-              <option value="">Semua lokasi</option>
-              {Object.entries(ECOSYSTEM_ROLES).map(([role, label]) => <option key={role} value={role}>{label}</option>)}
-            </select>
-          </label>
-          <label className="partner-map-filter">
-            <span>Jenis limbah</span>
-            <select name="wasteType" onChange={updateFilter} value={filters.wasteType}>
-              <option value="">Semua jenis limbah</option>
-              {FRUIT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
-          </label>
-          <label className="partner-map-filter">
-            <span>Jenis pengolahan</span>
-            <select name="processingType" onChange={updateFilter} value={filters.processingType}>
-              <option value="">Semua jenis pengolahan</option>
-              {filterOptions.processingTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
-          </label>
-          <label className="partner-map-filter">
-            <span>Produk hasil olahan</span>
-            <select name="productType" onChange={updateFilter} value={filters.productType}>
-              <option value="">Semua produk</option>
-              {filterOptions.productTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
-          </label>
-          <label className="partner-map-filter">
-            <span>Kecamatan</span>
-            <select name="district" onChange={updateFilter} value={filters.district}>
-              <option value="">Semua kecamatan</option>
-              {filterOptions.districts.map((district) => <option key={district} value={district}>{district}</option>)}
-            </select>
-          </label>
-          <label className="partner-map-filter">
-            <span>Kota/Kabupaten</span>
-            <select name="city" onChange={updateFilter} value={filters.city}>
-              <option value="">Semua kota/kabupaten</option>
-              {filterOptions.cities.map((city) => <option key={city} value={city}>{city}</option>)}
-            </select>
-          </label>
-          <button className="button button-outline partner-map-clear" disabled={!hasFilters} onClick={clearFilters} type="button">
-            Hapus filter
-          </button>
-        </div>
-
-        <div className="partner-map-results">
-          <p aria-live="polite" className="partner-map-result-count">
-            {state.status === 'loading' ? 'Memuat lokasi terverifikasi...' : `${visibleItems.length} lokasi terverifikasi ditemukan`}
-          </p>
-          {state.status === 'error' && <p className="partner-map-error" role="alert">{state.error}</p>}
-          <EcosystemMap focusId={focusId} items={visibleItems} />
+          <div className="partner-map-results ecosystem-map-results">
+            <p aria-live="polite" className="partner-map-result-count">
+              {state.status === 'loading' ? 'Memuat peta...' : `${visibleItems.length} lokasi ditampilkan`}
+            </p>
+            <div className="ecosystem-map-legend" aria-label="Legenda kategori peta">
+              {Object.entries(ECOSYSTEM_ROLES).map(([role, label]) => (
+                <span className="ecosystem-map-legend-item" key={role}>
+                  <i className={`ecosystem-map-legend-dot ecosystem-map-legend-${role}`} />
+                  {label}
+                </span>
+              ))}
+            </div>
+            <EcosystemMap
+              focusId={selectedItemId || focusId}
+              items={visibleItems}
+              onSelect={setSelectedItemId}
+            />
+          </div>
         </div>
       </section>
 

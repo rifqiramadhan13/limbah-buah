@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { FRUIT_TYPES } from '../shared/form-options.js'
@@ -48,10 +48,11 @@ function createPopupContent(partner) {
   return content
 }
 
-function PartnerMap({ partners }) {
+function PartnerMap({ partners, selectedPartnerId, onSelectPartner }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const markerLayerRef = useRef(null)
+  const markerRefs = useRef(new Map())
   const [tileError, setTileError] = useState(false)
 
   useEffect(() => {
@@ -60,11 +61,12 @@ function PartnerMap({ partners }) {
     const map = L.map(containerRef.current, {
       scrollWheelZoom: false,
       zoomControl: true,
-    }).setView([-2.5, 118], 4)
+    }).setView([-7.9666, 112.6326], 13)
     const markers = L.layerGroup().addTo(map)
-    const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
+    const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20,
     }).addTo(map)
 
     tileLayer.on('tileerror', () => setTileError(true))
@@ -78,6 +80,7 @@ function PartnerMap({ partners }) {
       map.remove()
       mapRef.current = null
       markerLayerRef.current = null
+      markerRefs.current = new Map()
     }
   }, [])
 
@@ -87,28 +90,44 @@ function PartnerMap({ partners }) {
     if (!map || !markerLayer) return
 
     markerLayer.clearLayers()
-    const markers = partners.map((partner) => L.marker(
-      [partner.latitude, partner.longitude],
-      {
-        alt: partner.name,
-        icon: L.divIcon({
-          className: 'partner-map-marker',
-          html: '<span></span>',
-          iconSize: [30, 38],
-          iconAnchor: [15, 36],
-          popupAnchor: [0, -32],
-        }),
-        keyboard: true,
-        title: partner.name,
-      },
-    ).bindPopup(L.popup({ maxWidth: 280 }).setContent(createPopupContent(partner))).addTo(markerLayer))
+    markerRefs.current = new Map()
+    partners.forEach((partner) => {
+      const marker = L.marker(
+        [partner.latitude, partner.longitude],
+        {
+          alt: partner.name,
+          icon: L.divIcon({
+            className: 'partner-map-marker',
+            html: '<span></span>',
+            iconSize: [30, 38],
+            iconAnchor: [15, 36],
+            popupAnchor: [0, -32],
+          }),
+          keyboard: true,
+          title: partner.name,
+        },
+      )
+        .bindPopup(L.popup({ maxWidth: 280 }).setContent(createPopupContent(partner)))
+        .on('click', () => onSelectPartner(partner.id))
+        .addTo(markerLayer)
+      markerRefs.current.set(partner.id, marker)
+    })
+  }, [partners, onSelectPartner])
 
-    if (markers.length === 1) {
-      map.setView(markers[0].getLatLng(), 13)
-    } else if (markers.length > 1) {
-      map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15), { maxZoom: 12 })
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const marker = markerRefs.current.get(selectedPartnerId)
+    if (!selectedPartnerId) {
+      map.flyTo([-7.9666, 112.6326], 13, { duration: 0.6 })
+      return
     }
-  }, [partners])
+    if (!marker) return
+
+    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 15), { duration: 0.6 })
+    marker.openPopup()
+  }, [selectedPartnerId, partners])
 
   return (
     <div className="partner-map-wrap">
@@ -123,21 +142,19 @@ function PartnerMap({ partners }) {
           Peta dasar belum dapat dimuat. Periksa koneksi internet; data mitra tetap tersedia pada hasil pencarian.
         </p>
       )}
-      {!partners.length && (
-        <div className="partner-map-empty" role="status">
-          <strong>Belum ada lokasi mitra yang dapat ditampilkan.</strong>
-          <span>Lokasi hanya muncul setelah mitra diverifikasi dan diizinkan untuk dipublikasikan.</span>
-        </div>
-      )}
     </div>
   )
 }
 
-export default function PartnerMapSection() {
-  const [filters, setFilters] = useState({ q: '', region: '', fruitType: '' })
-  const [regions, setRegions] = useState([])
+export default function PartnerMapSection({ onRegister }) {
+  const [filters, setFilters] = useState({ q: '', fruitType: '' })
   const [partners, setPartners] = useState([])
+  const [selectedPartnerId, setSelectedPartnerId] = useState(null)
   const [state, setState] = useState({ status: 'loading', error: '' })
+
+  const selectPartner = useCallback((partnerId) => {
+    setSelectedPartnerId(partnerId)
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -146,14 +163,16 @@ export default function PartnerMapSection() {
       setState((current) => ({ ...current, status: 'loading', error: '' }))
       const params = new URLSearchParams()
       if (filters.q.trim()) params.set('q', filters.q.trim())
-      if (filters.region) params.set('region', filters.region)
       if (filters.fruitType) params.set('fruitType', filters.fruitType)
 
       try {
         const result = await getJson(`/api/partners?${params}`, { signal: controller.signal })
         if (!active) return
-        setPartners(Array.isArray(result.items) ? result.items : [])
-        setRegions(Array.isArray(result.regions) ? result.regions : [])
+        const nextPartners = Array.isArray(result.items) ? result.items : []
+        setPartners(nextPartners)
+        setSelectedPartnerId((current) => (
+          nextPartners.some((partner) => partner.id === current) ? current : null
+        ))
         setState({ status: 'ready', error: '' })
       } catch (error) {
         if (!active || error?.name === 'AbortError') return
@@ -176,7 +195,7 @@ export default function PartnerMapSection() {
     setFilters((current) => ({ ...current, [name]: value }))
   }
 
-  const clearFilters = () => setFilters({ q: '', region: '', fruitType: '' })
+  const clearFilters = () => setFilters({ q: '', fruitType: '' })
   const hasFilters = Object.values(filters).some(Boolean)
 
   return (
@@ -185,56 +204,91 @@ export default function PartnerMapSection() {
         <div className="partner-map-heading">
           <div>
             <p className="eyebrow"><span className="eyebrow-line" /> JARINGAN MITRA SIRKULIT</p>
-            <h2>Temukan Mitra Pengolah Limbah <em>di Sekitarmu</em></h2>
+            <h2>Temukan Mitra Setor Kulit Buah <em>di Sekitarmu</em></h2>
           </div>
-          <p>Jelajahi lokasi mitra SIRKULIT yang telah terdaftar dan terverifikasi untuk menemukan tempat pengolahan limbah kulit buah.</p>
+          <p>Temukan mitra terverifikasi, lihat jenis kulit buah yang diterima, lalu ajukan penyetoran.</p>
         </div>
 
-        <div className="partner-map-filters" aria-label="Pencarian dan filter mitra">
-          <label className="partner-map-filter">
-            <span>Nama mitra</span>
-            <input
-              autoComplete="off"
-              maxLength="100"
-              name="q"
-              onChange={updateFilter}
-              placeholder="Cari nama mitra"
-              type="search"
-              value={filters.q}
+        <div className="partner-map-layout">
+          <aside className="partner-map-sidebar" aria-label="Daftar mitra">
+            <div className="partner-map-filters" aria-label="Pencarian dan filter mitra">
+              <label className="partner-map-filter">
+                <span>Cari mitra</span>
+                <input
+                  autoComplete="off"
+                  maxLength="100"
+                  name="q"
+                  onChange={updateFilter}
+                  placeholder="Nama mitra"
+                  type="search"
+                  value={filters.q}
+                />
+              </label>
+              <label className="partner-map-filter">
+                <span>Jenis kulit buah</span>
+                <select name="fruitType" onChange={updateFilter} value={filters.fruitType}>
+                  <option value="">Semua jenis</option>
+                  {FRUIT_TYPES.map((fruitType) => <option key={fruitType} value={fruitType}>{fruitType}</option>)}
+                </select>
+              </label>
+              <button
+                className="button button-outline partner-map-clear"
+                disabled={!hasFilters}
+                onClick={clearFilters}
+                type="button"
+              >
+                Hapus filter
+              </button>
+            </div>
+
+            <div className="partner-map-list">
+              <p aria-live="polite" className="partner-map-result-count">
+                {state.status === 'loading'
+                  ? 'Memuat lokasi mitra...'
+                  : `${partners.length} mitra ditemukan`}
+              </p>
+              {state.status === 'error' && <p className="partner-map-error" role="alert">{state.error}</p>}
+              {state.status === 'ready' && !partners.length && (
+                <p className="partner-map-list-empty" role="status">
+                  Tidak ada mitra yang cocok. Coba ubah pencarian atau filter.
+                </p>
+              )}
+              {partners.map((partner) => (
+                <article
+                  className={`partner-map-card${selectedPartnerId === partner.id ? ' is-selected' : ''}`}
+                  key={partner.id}
+                >
+                  <button
+                    aria-pressed={selectedPartnerId === partner.id}
+                    className="partner-map-card-select"
+                    onClick={() => selectPartner(partner.id)}
+                    type="button"
+                  >
+                    <span className="partner-map-card-name">{partner.name}</span>
+                    <span className="partner-map-card-region">Wilayah / kecamatan: {partner.region}</span>
+                    <span className="partner-map-card-types">
+                      <span>Menerima:</span> {partner.acceptedFruitTypes.join(', ')}
+                    </span>
+                  </button>
+                  <a
+                    className="partner-map-card-cta"
+                    href="/daftar-limbah"
+                    onClick={onRegister}
+                  >
+                    Ajukan Setor
+                  </a>
+                </article>
+              ))}
+            </div>
+          </aside>
+
+          <div className="partner-map-results">
+            <PartnerMap
+              onSelectPartner={selectPartner}
+              partners={partners}
+              selectedPartnerId={selectedPartnerId}
             />
-          </label>
-          <label className="partner-map-filter">
-            <span>Wilayah</span>
-            <select name="region" onChange={updateFilter} value={filters.region}>
-              <option value="">Semua wilayah</option>
-              {regions.map((region) => <option key={region} value={region}>{region}</option>)}
-            </select>
-          </label>
-          <label className="partner-map-filter">
-            <span>Jenis kulit buah</span>
-            <select name="fruitType" onChange={updateFilter} value={filters.fruitType}>
-              <option value="">Semua jenis</option>
-              {FRUIT_TYPES.map((fruitType) => <option key={fruitType} value={fruitType}>{fruitType}</option>)}
-            </select>
-          </label>
-          <button
-            className="button button-outline partner-map-clear"
-            disabled={!hasFilters}
-            onClick={clearFilters}
-            type="button"
-          >
-            Hapus filter
-          </button>
-        </div>
-
-        <div className="partner-map-results">
-          <p aria-live="polite" className="partner-map-result-count">
-            {state.status === 'loading'
-              ? 'Memuat lokasi mitra...'
-              : `${partners.length} lokasi mitra ditemukan`}
-          </p>
-          {state.status === 'error' && <p className="partner-map-error" role="alert">{state.error}</p>}
-          <PartnerMap partners={partners} />
+          </div>
         </div>
       </div>
     </section>
